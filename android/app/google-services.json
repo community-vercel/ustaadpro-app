@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "43202449928",
+    "project_id": "ustaadpro-8eb72",
+    "storage_bucket": "ustaadpro-8eb72.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:43202449928:android:a6642485d8f5cd6d1377bd",
+        "android_client_info": {
+          "package_name": "app.sharplogicians.ustaadpro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApZ2p8b_eXHK4d6PktLErwlCIKrIvJR4g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

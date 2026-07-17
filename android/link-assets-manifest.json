@@ -1,0 +1,13 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "src/assets/fonts/.gitkeep",
+      "sha1": "adc83b19e793491b1c6ea0fd8b46cd9f32e592fc"
+    },
+    {
+      "path": "src/assets/fonts/README.md",
+      "sha1": "ed4f4f47a0c8ad713f98ab0951c64d48ab150028"
+    }
+  ]
+}
