@@ -1,4 +1,4 @@
-# Theka Online
+# Ustaad Pro
 
 Premium React Native CLI TypeScript clone for an on-demand home services marketplace.
 
