@@ -21,6 +21,7 @@ export interface ServiceWorkPrice {
 export interface ServiceItem {
   id: string;
   categoryId: ServiceCategoryId;
+  subcategoryId?: string;
   serviceType?: string;
   title: string;
   description: string;

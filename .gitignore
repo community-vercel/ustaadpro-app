@@ -1,1 +1,22 @@
 node_modules
+
+# iOS
+ios/build/
+ios/Pods/
+ios/DerivedData/
+ios/.xcode.env.local
+ios/**/*.xcworkspace
+!ios/UstaadPro.xcodeproj/project.xcworkspace
+
+# Android
+android/build/
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# React Native
+.bundle/
+
+# Misc
+.DS_Store
+*.log
