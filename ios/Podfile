@@ -1,3 +1,10 @@
+# Match android/gradle.properties (newArchEnabled=false): some dependencies
+# (e.g. @react-native-community/blur) aren't fully Fabric-migrated yet, which
+# causes legacy ScrollView/RefreshControl events to hit the retired
+# RCTEventEmitter JS module and crash. Keep iOS on the old architecture too
+# until those dependencies catch up.
+ENV['RCT_NEW_ARCH_ENABLED'] = '0'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-e',
   'require("path");require("os");var p = require.resolve("react-native/scripts/react_native_pods.rb",{paths:[process.argv[1]]});process.stdout.write(p)',
@@ -15,6 +22,10 @@ end
 
 target 'UstaadPro' do
   config = use_native_modules!
+
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'FirebaseCoreExtension', :modular_headers => true
 
   use_react_native!(
     :path => config[:reactNativePath],
@@ -34,5 +45,17 @@ target 'UstaadPro' do
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
+
+    # Xcode 26.4's Clang is stricter about consteval; fmt's compile-time format
+    # string checks don't satisfy it under C++20. Building fmt as C++17 skips
+    # that path and falls back to runtime checking. Safe to remove once
+    # React Native bundles a fmt release that builds clean under C++20 here.
+    installer.pods_project.targets.each do |target|
+      if target.name == 'fmt'
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        end
+      end
+    end
   end
 end

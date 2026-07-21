@@ -22,6 +22,8 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>4</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -33,14 +35,20 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>This app uses the camera to let you take photos for your profile and service listings.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app uses your location to show nearby services and professionals.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>This app uses your location to show nearby services and professionals.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app accesses your photos to let you upload images for your profile and service listings.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to show nearby services and professionals.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app uses the microphone for voice features.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app accesses your photos to let you upload images for your profile and service listings.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<false/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -50,14 +58,14 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
-	<key>UIFileSharingEnabled</key>
-	<false/>
-	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
 </plist>

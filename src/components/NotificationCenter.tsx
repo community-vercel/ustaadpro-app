@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Bell, CircleAlert, Megaphone, PackageCheck, ShoppingBag, X} from 'lucide-react-native';
 import {useAppStore} from '@/store/useAppStore';
 import {colors} from '@/theme/colors';
@@ -47,6 +47,7 @@ export function NotificationCenter({
   const markNotificationRead = useAppStore(state => state.markNotificationRead);
   const [visible, setVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const unreadCount = useMemo(
     () => notifications.filter(item => !item.read).length,
@@ -92,9 +93,9 @@ export function NotificationCenter({
         animationType="slide"
         onRequestClose={() => setVisible(false)}
       >
-        <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <SafeAreaView style={styles.screen} edges={['bottom']}>
           <View style={styles.page}>
-            <View style={styles.sheetHeader}>
+            <View style={[styles.sheetHeader, {paddingTop: insets.top + 18}]}>
               <View>
                 <Text style={styles.sheetTitle}>Notifications</Text>
                 <Text style={styles.sheetSubtitle}>

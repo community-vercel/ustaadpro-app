@@ -325,11 +325,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         status: notification.status,
       };
 
+      let nextNotifications: AppNotification[] = [];
       set(state => {
-        const notifications = [nextNotification, ...state.notifications].slice(0, 100);
-        void AsyncStorage.setItem('push_notifications', JSON.stringify(notifications));
-        return {notifications};
+        nextNotifications = [nextNotification, ...state.notifications].slice(0, 100);
+        return {notifications: nextNotifications};
       });
+      await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
     } catch (error) {
       console.error('Add notification error:', error);
     }
@@ -337,13 +338,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   markNotificationRead: async id => {
     try {
+      let nextNotifications: AppNotification[] = [];
       set(state => {
-        const notifications = state.notifications.map(item =>
+        nextNotifications = state.notifications.map(item =>
           item.id === id ? {...item, read: true} : item,
         );
-        void AsyncStorage.setItem('push_notifications', JSON.stringify(notifications));
-        return {notifications};
+        return {notifications: nextNotifications};
       });
+      await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
     } catch (error) {
       console.error('Mark notification read error:', error);
     }
@@ -355,11 +357,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   markAllNotificationsRead: async () => {
     try {
+      let nextNotifications: AppNotification[] = [];
       set(state => {
-        const notifications = state.notifications.map(item => ({...item, read: true}));
-        void AsyncStorage.setItem('push_notifications', JSON.stringify(notifications));
-        return {notifications};
+        nextNotifications = state.notifications.map(item => ({...item, read: true}));
+        return {notifications: nextNotifications};
       });
+      await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
     } catch (error) {
       console.error('Mark all notifications read error:', error);
     }

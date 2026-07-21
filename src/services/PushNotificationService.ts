@@ -4,7 +4,7 @@ import { apiClient } from '@/api/client';
 import {playConfirmationCue} from '@/utils/confirmationCue';
 import {useAppStore} from '@/store/useAppStore';
 
-function storeIncomingNotification(remoteMessage: any) {
+async function storeIncomingNotification(remoteMessage: any) {
   const title = remoteMessage?.notification?.title || 'Notification';
   const body = remoteMessage?.notification?.body || '';
   const orderId = remoteMessage?.data?.orderId;
@@ -22,7 +22,7 @@ function storeIncomingNotification(remoteMessage: any) {
     void useAppStore.getState().fetchShopOrders();
   }
 
-  void useAppStore.getState().addNotification({
+  await useAppStore.getState().addNotification({
     title,
     body,
     orderId,
@@ -112,7 +112,7 @@ class PushNotificationService {
       console.log('A new FCM message arrived!', JSON.stringify(remoteMessage));
       if (remoteMessage.notification) {
         playConfirmationCue();
-        storeIncomingNotification(remoteMessage);
+        await storeIncomingNotification(remoteMessage);
         onForegroundMessage?.({
           title: remoteMessage.notification.title || 'Notification',
           body: remoteMessage.notification.body || '',
@@ -120,17 +120,17 @@ class PushNotificationService {
       }
     });
 
-    messaging().onNotificationOpenedApp(remoteMessage => {
+    messaging().onNotificationOpenedApp(async remoteMessage => {
       if (remoteMessage?.notification) {
-        storeIncomingNotification(remoteMessage);
+        await storeIncomingNotification(remoteMessage);
       }
     });
 
     messaging()
       .getInitialNotification()
-      .then(remoteMessage => {
+      .then(async remoteMessage => {
         if (remoteMessage?.notification) {
-          storeIncomingNotification(remoteMessage);
+          await storeIncomingNotification(remoteMessage);
         }
       });
 
@@ -143,7 +143,7 @@ export const pushNotificationService = new PushNotificationService();
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('Message handled in the background!', remoteMessage);
   if (remoteMessage?.notification) {
-    storeIncomingNotification(remoteMessage);
+    await storeIncomingNotification(remoteMessage);
   }
 });
 

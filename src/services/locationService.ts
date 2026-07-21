@@ -26,7 +26,9 @@ const CurrentLocation = NativeModules.CurrentLocation as
 
 export async function requestLocationPermission() {
   if (Platform.OS !== 'android') {
-    return false;
+    // iOS permission prompting is handled natively by CLLocationManager
+    // inside the CurrentLocation module.
+    return true;
   }
 
   const finePermission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
