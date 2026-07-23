@@ -520,6 +520,10 @@ export function StoreTab(): React.JSX.Element {
 
             {selectedProduct && (
               <>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.detailScrollContent}
+                >
                 <View style={styles.detailImageBox}>
                   {selectedProduct.imageUrl ? (
                     <Image
@@ -623,6 +627,7 @@ export function StoreTab(): React.JSX.Element {
                     </View>
                   </View>
                 ) : null}
+                </ScrollView>
                 <View style={styles.detailFooterActions}>
                   <Pressable
                     style={[
@@ -1743,6 +1748,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
+  },
+  detailScrollContent: {
+    paddingBottom: 4,
   },
   cartSheet: {
     maxHeight: '86%',

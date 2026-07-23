@@ -1359,7 +1359,7 @@ const styles = StyleSheet.create({
     borderRadius: rounded.xl,
     padding: 14,
     flexDirection: 'row',
-    height: 128,
+    minHeight: 168,
     overflow: 'hidden',
     position: 'relative',
   },
