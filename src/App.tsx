@@ -135,11 +135,18 @@ function LocationTileMap({
 }) {
   const [mapSize, setMapSize] = useState<MapSize>({ width: 0, height: 0 });
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
-  const [pinPosition, setPinPosition] = useState<{ x: number; y: number } | null>(
-    null,
-  );
-  const centerTileX = lonToTileX(location.longitude);
-  const centerTileY = latToTileY(location.latitude);
+  const [centerLocation, setCenterLocation] = useState(location);
+  const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!lastTouch) {
+      setCenterLocation(location);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.latitude, location.longitude]); 
+
+  const centerTileX = lonToTileX(centerLocation.longitude);
+  const centerTileY = latToTileY(centerLocation.latitude);
   const baseTileX = Math.floor(centerTileX);
   const baseTileY = Math.floor(centerTileY);
   const tileOffsets = [-1, 0, 1];
@@ -149,50 +156,38 @@ function LocationTileMap({
     setMapSize({ width, height });
   };
 
-  useEffect(() => {
-    if (!mapSize.width || !mapSize.height) {
+  const handleGrant = (event: GestureResponderEvent) => {
+    setLastTouch({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+  };
+
+  const handleMove = (event: GestureResponderEvent) => {
+    if (!lastTouch || !mapSize.width) {
       return;
     }
+    const { pageX, pageY } = event.nativeEvent;
+    const dx = pageX - lastTouch.x;
+    const dy = pageY - lastTouch.y;
 
-    setPinPosition({ x: mapSize.width / 2, y: mapSize.height / 2 });
-  }, [location.latitude, location.longitude, mapSize.height, mapSize.width]);
+    const tileDx = dx / MAP_TILE_SIZE;
+    const tileDy = dy / MAP_TILE_SIZE;
 
-  const getBoundedPinPosition = (event: GestureResponderEvent) => {
-    if (!mapSize.width || !mapSize.height) {
-      return null;
-    }
+    const newCenterTileX = lonToTileX(centerLocation.longitude) - tileDx;
+    const newCenterTileY = latToTileY(centerLocation.latitude) - tileDy;
 
-    return {
-      x: Math.max(0, Math.min(mapSize.width, event.nativeEvent.locationX)),
-      y: Math.max(0, Math.min(mapSize.height, event.nativeEvent.locationY)),
-    };
+    setCenterLocation({
+      latitude: Math.max(-85, Math.min(85, tileYToLat(newCenterTileY))),
+      longitude: tileXToLon(newCenterTileX),
+    });
+
+    setLastTouch({ x: pageX, y: pageY });
   };
 
-  const movePin = (event: GestureResponderEvent) => {
-    const nextPosition = getBoundedPinPosition(event);
-    if (!nextPosition) {
-      return null;
-    }
-
-    setPinPosition(nextPosition);
-    return nextPosition;
+  const handleRelease = () => {
+    setLastTouch(null);
+    onSelectLocation(centerLocation);
   };
 
-  const finishPinMove = (event: GestureResponderEvent) => {
-    const nextPosition = movePin(event);
-    if (!nextPosition) {
-      return;
-    }
-
-    onSelectLocation(
-      getMapCoordinateFromPoint(
-        nextPosition.x,
-        nextPosition.y,
-        location,
-        mapSize,
-      ),
-    );
-  };
+  const pinPosition = mapSize.width > 0 ? { x: mapSize.width / 2, y: mapSize.height / 2 } : null;
 
   return (
     <View
@@ -200,10 +195,10 @@ function LocationTileMap({
       onLayout={handleLayout}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
-      onResponderGrant={movePin}
-      onResponderMove={movePin}
-      onResponderRelease={finishPinMove}
-      onResponderTerminate={finishPinMove}
+      onResponderGrant={handleGrant}
+      onResponderMove={handleMove}
+      onResponderRelease={handleRelease}
+      onResponderTerminate={handleRelease}
     >
       {mapSize.width > 0 &&
         !mapLoadFailed &&
