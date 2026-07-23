@@ -25,6 +25,7 @@ import { CartScreen } from '@/screens/main/CartScreen';
 import { ShoppingOrdersScreen } from '@/screens/main/ShoppingOrdersScreen';
 import { AboutScreen } from '@/screens/main/AboutScreen';
 import { PrivacyPolicyScreen } from '@/screens/main/PrivacyPolicyScreen';
+import { ComplaintsScreen } from '@/screens/main/ComplaintsScreen';
 import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme/colors';
 import { pushNotificationService } from '@/services/PushNotificationService';
@@ -575,6 +576,10 @@ export default function App(): React.JSX.Element {
               <RootStack.Screen
                 name="PrivacyPolicy"
                 component={PrivacyPolicyScreen}
+              />
+              <RootStack.Screen
+                name="Complaints"
+                component={ComplaintsScreen}
               />
               {isGuest && (
                 <RootStack.Screen name="Auth" component={AuthNavigator} />

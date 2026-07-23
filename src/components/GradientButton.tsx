@@ -6,8 +6,9 @@ import {fontFamily} from '@/theme/typography';
 
 interface GradientButtonProps {
   title: string;
-  onPress: () => void;
+  onPress: () => void | Promise<void>;
   loading?: boolean;
+  disabled?: boolean;
   style?: ViewStyle;
 }
 
@@ -15,10 +16,11 @@ export function GradientButton({
   title,
   onPress,
   loading = false,
+  disabled = false,
   style,
 }: GradientButtonProps): React.JSX.Element {
   return (
-    <Pressable onPress={onPress} disabled={loading} style={style}>
+    <Pressable onPress={onPress} disabled={disabled || loading} style={style}>
       <LinearGradient
         colors={[colors.primary, colors.accent]}
         start={{x: 0, y: 0}}

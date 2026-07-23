@@ -30,4 +30,5 @@ export type RootStackParamList = {
   ShoppingOrders: undefined;
   About: undefined;
   PrivacyPolicy: undefined;
+  Complaints: undefined;
 };

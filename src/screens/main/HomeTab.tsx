@@ -41,6 +41,7 @@ import {
   Hammer,
   Anvil,
   Cctv,
+  AlertCircle,
 } from 'lucide-react-native';
 import {RootStackParamList} from '@/navigation/types';
 import {useAppStore} from '@/store/useAppStore';
@@ -318,6 +319,14 @@ export function HomeTab(): React.JSX.Element {
         label: 'About Ustaad Pro',
         Icon: Info,
         onPress: () => navigation.navigate('About'),
+      },
+      {
+        label: 'Complaints',
+        Icon: AlertCircle,
+        onPress: () =>
+          user
+            ? navigation.navigate('Complaints')
+            : navigation.navigate('Auth', {screen: 'Login'}),
       },
       {
         label: 'Privacy Policy',

@@ -1,4 +1,4 @@
-﻿import React, {useMemo, useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   FlatList,
   Image,
@@ -96,9 +96,9 @@ export function NotificationCenter({
         <SafeAreaView style={styles.screen} edges={['bottom']}>
           <View style={styles.page}>
             <View style={[styles.sheetHeader, {paddingTop: insets.top + 18}]}>
-              <View>
-                <Text style={styles.sheetTitle}>Notifications</Text>
-                <Text style={styles.sheetSubtitle}>
+              <View style={{ flex: 1, paddingRight: 16 }}>
+                <Text style={styles.sheetTitle} numberOfLines={1} adjustsFontSizeToFit>Notifications</Text>
+                <Text style={styles.sheetSubtitle} numberOfLines={1}>
                   {notifications.length
                     ? `${notifications.length} push notification${notifications.length === 1 ? '' : 's'}`
                     : 'No notifications yet'}

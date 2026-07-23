@@ -1,0 +1,229 @@
+# UstaadPro Order API Paths and Payloads
+
+Base URL: `https://api.ustaadpro.pk/api`
+
+All authenticated endpoints require:
+
+```http
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+## 1. Service order
+
+### Create service order (checkout)
+
+```http
+POST /orders/checkout
+```
+
+```json
+{
+  "cart": [
+    {
+      "service": {
+        "id": "service-id",
+        "title": "AC Repair",
+        "price": 2500,
+        "selectedWorkPriceId": 12,
+        "selectedWorkTitle": "Gas refill"
+      },
+      "quantity": 1
+    }
+  ],
+  "bookedFor": "Tomorrow, 2:00 PM",
+  "paymentMethod": "Easypaisa After Work Done",
+  "address": "House 12, Street 4, Lahore",
+  "specialInstructions": "Call before arriving",
+  "inspectionFee": 500,
+  "tax": 0,
+  "recurringOccurrences": 1,
+  "useRewardPoints": false
+}
+```
+
+Expected response:
+
+```json
+{
+  "order": { "id": "order-id", "status": "confirmed" },
+  "user": { "rewardPoints": 0 }
+}
+```
+
+### Service status lifecycle
+
+```text
+confirmed -> assigned -> in_progress -> completed
+```
+
+The mobile app reads these statuses. Completion is an admin/server operation.
+Recommended admin endpoint:
+
+```http
+PATCH /admin/orders/:orderId/status
+```
+
+```json
+{ "status": "completed" }
+```
+
+### Update service booking
+
+```http
+PUT /orders/:orderId
+```
+
+```json
+{
+  "address": "Updated address",
+  "specialInstructions": "Updated note",
+  "bookedFor": "Tomorrow, 2:00 PM",
+  "recurringOccurrences": 1,
+  "items": [
+    { "serviceId": "service-id", "quantity": 1 }
+  ]
+}
+```
+
+### Upload EasyPaisa payment receipt
+
+After a completed service, the customer pays through EasyPaisa and uploads proof:
+
+```http
+POST /orders/:orderId/payment-receipt
+```
+
+```json
+{
+  "dataUrl": "data:image/jpeg;base64,/9j/4AAQ...",
+  "filename": "easypaisa-receipt.jpg",
+  "amount": 3000
+}
+```
+
+Recommended admin receipt-verification endpoint:
+
+```http
+PATCH /admin/orders/:orderId/payment-receipt
+```
+
+```json
+{ "status": "verified" }
+```
+
+Possible receipt statuses: `pending`, `verified`, `rejected`.
+
+### Cancel service order
+
+```http
+PATCH /orders/:orderId/cancel
+```
+
+```json
+{ "cancelReason": "Change of plan" }
+```
+
+### Get service orders
+
+```http
+GET /orders
+```
+
+## 2. Shop product order
+
+### Create shop order (checkout)
+
+```http
+POST /shop/checkout
+```
+
+```json
+{
+  "items": [
+    { "productId": "product-id", "quantity": 2 }
+  ],
+  "address": "House 12, Street 4, Lahore",
+  "paymentMethod": "Easypaisa",
+  "useRewardPoints": false
+}
+```
+
+Expected response:
+
+```json
+{
+  "order": { "id": "shop-order-id", "status": "placed" },
+  "user": { "rewardPoints": 0 }
+}
+```
+
+### Shop status lifecycle
+
+```text
+placed -> payment_pending -> processing -> shipped -> delivered
+```
+
+`payment_pending` is recommended for EasyPaisa. For cash on delivery, the order can move directly from `placed` to `processing`.
+
+Recommended admin status endpoint:
+
+```http
+PATCH /admin/shop/orders/:orderId/status
+```
+
+```json
+{ "status": "delivered" }
+```
+
+### Upload shop EasyPaisa receipt (recommended server endpoint)
+
+```http
+POST /shop/orders/:orderId/payment-receipt
+```
+
+```json
+{
+  "dataUrl": "data:image/jpeg;base64,/9j/4AAQ...",
+  "filename": "easypaisa-shop-receipt.jpg",
+  "amount": 4500
+}
+```
+
+Recommended verification endpoint:
+
+```http
+PATCH /admin/shop/orders/:orderId/payment-receipt
+```
+
+```json
+{ "status": "verified" }
+```
+
+### Cancel shop order
+
+```http
+PATCH /shop/orders/:orderId/cancel
+```
+
+```json
+{ "cancelReason": "Ordered by mistake" }
+```
+
+### Get shop orders
+
+```http
+GET /shop/orders
+```
+
+### Get shop products
+
+```http
+GET /shop/products
+```
+
+## Notes
+
+- Existing mobile endpoints: `/orders/checkout`, `/orders/:orderId/payment-receipt`, `/shop/checkout`, `/orders/:orderId/cancel`, `/shop/orders/:orderId/cancel`, `/orders`, and `/shop/orders`.
+- Admin completion and shop EasyPaisa receipt paths above are recommended API contracts. They must be implemented in the backend if they do not already exist.
+- Reward points should be granted only when the service becomes `completed` and when the shop order becomes `delivered`.
