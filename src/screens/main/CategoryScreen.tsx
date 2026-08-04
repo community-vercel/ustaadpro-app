@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {ArrowLeft, Star, ChevronRight, PackageSearch} from 'lucide-react-native';
+import {ArrowLeft, Star, ChevronRight, PackageSearch, Layers} from 'lucide-react-native';
 import {subscriptions} from '@/data/mockData';
 import {RootStackParamList} from '@/navigation/types';
 import {useAppStore} from '@/store/useAppStore';
@@ -34,22 +34,61 @@ type FlatServiceItem = {
 };
 
 export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
-  const {services, fetchServices} = useAppStore();
+  const {services, categories, subcategories, fetchServices} = useAppStore();
+  const isAllCategories = route.params.categoryId === 'all';
+  const isAllSubcategories = route.params.categoryId === 'all-subcategories';
+  const isMainService = !isAllCategories && !isAllSubcategories && !route.params.showServices;
+
+  const subservices = useMemo(() => {
+    if (!isMainService) return [];
+    const seen = new Map<string, {id: string; title: string; imageUrl?: string; count: number}>();
+    services
+      .filter(item => item.categoryId === route.params.categoryId && item.subcategoryId)
+      .forEach(item => {
+        const id = item.subcategoryId as string;
+        const previous = seen.get(id);
+        seen.set(id, {
+          id,
+          title: subcategories.find(item => item.id === id)?.title || id.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
+          imageUrl: previous?.imageUrl || subcategories.find(item => item.id === id)?.mobileIconUrl || subcategories.find(item => item.id === id)?.webImageUrl || subcategories.find(item => item.id === id)?.imageUrl || item.imageUrl,
+          count: (previous?.count || 0) + 1,
+        });
+      });
+    return Array.from(seen.values());
+  }, [isMainService, route.params.categoryId, services, subcategories]);
+
+  const allSubservices = useMemo(() =>
+    subcategories
+      .map(subcategory => {
+        const matchingServices = services.filter(service => service.subcategoryId === subcategory.id);
+        return {
+          id: subcategory.id,
+          title: subcategory.title,
+          imageUrl: subcategory.mobileIconUrl || subcategory.webImageUrl || subcategory.imageUrl || matchingServices[0]?.imageUrl,
+          count: matchingServices.length,
+        };
+      })
+      .filter(subcategory => subcategory.count > 0),
+    [services, subcategories],
+  );
+  const displayedSubservices = isAllSubcategories ? allSubservices : subservices;
 
   const categoryServices = useMemo(() => {
-    if (route.params.categoryId === 'all') {
-      return services;
+    if (route.params.categoryId === 'all') return services;
+    if (isMainService) {
+      // Main services without a sub-service remain bookable directly.
+      return services.filter(item => item.categoryId === route.params.categoryId && !item.subcategoryId);
     }
-    return services.filter(
-      item =>
-        item.categoryId === route.params.categoryId ||
-        item.subcategoryId === route.params.categoryId,
-    );
-  }, [services, route.params.categoryId]);
+    return services.filter(item => item.subcategoryId === route.params.categoryId);
+  }, [isMainService, route.params.categoryId, services]);
+  // Main categories with sub-services are navigation-only. This preserves the
+  // intended category -> subcategory -> service journey.
+  const showServiceList = !isAllCategories && !isAllSubcategories && (!isMainService || subservices.length === 0);
 
   // Flatten services into individual specific work items so each
   // work price (e.g. "Fan Installation", "Breaker Replacement") shows as its own card.
   const serviceList = useMemo<FlatServiceItem[]>(() => {
+    if (isAllCategories) return [];
     const list: FlatServiceItem[] = [];
 
     categoryServices.forEach(service => {
@@ -100,7 +139,7 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
     });
 
     return list;
-  }, [categoryServices]);
+  }, [categoryServices, isAllCategories]);
 
   useEffect(() => {
     if (!services.length) {
@@ -121,11 +160,72 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
       </View>
 
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
 
+        {isAllCategories && (
+          <View style={styles.allCatalogueSection}>
+            <View style={styles.allCatalogueIntro}>
+              <View>
+                <Text style={styles.allCatalogueKicker}>SERVICE CATALOGUE</Text>
+                <Text style={styles.allCatalogueTitle}>Explore our services</Text>
+                <Text style={styles.allCatalogueSubtitle}>Choose a category and find a trusted professional.</Text>
+              </View>
+              <View style={styles.allCatalogueCount}><Text style={styles.allCatalogueCountNumber}>{categories.length}</Text><Text style={styles.allCatalogueCountLabel}>categories</Text></View>
+            </View>
+            <View style={styles.allCategoryGrid}>
+              {categories.map((category, index) => {
+                const count = services.filter(service => service.categoryId === category.id).length;
+                const imageUrl = category.webImageUrl || category.mobileIconUrl || category.imageUrl;
+                const tint = category.tint || '#006C49';
+                const featured = index === 0;
+                return <Pressable key={category.id} accessibilityRole="button" accessibilityLabel={'Explore ' + category.title} style={({pressed}) => [styles.allCategoryCard, featured && styles.allCategoryFeatured, pressed && styles.cardPressed]} onPress={() => navigation.push('Category', {categoryId: category.id, title: category.title})}>
+                  <View style={[styles.allCategoryImageWrap, featured && styles.allCategoryFeaturedImageWrap, {backgroundColor: tint + '14'}]}>{imageUrl ? <Image source={{uri: imageUrl}} style={styles.allCategoryImage} /> : <Layers color={tint} size={30} />}</View>
+                  <View style={[styles.allCategoryBody, featured && styles.allCategoryFeaturedBody]}><Text style={[styles.allCategoryTitle, featured && styles.allCategoryFeaturedTitle]} numberOfLines={2}>{category.title}</Text><View style={styles.allCategoryMetaRow}><Text style={styles.allCategoryMeta}>{count} service{count === 1 ? '' : 's'}</Text><View style={[styles.allCategoryArrow, {backgroundColor: tint}]}><ChevronRight color="#FFFFFF" size={15} strokeWidth={2.8} /></View></View></View>
+                </Pressable>;
+              })}
+            </View>
+          </View>
+        )}
+
+        {displayedSubservices.length > 0 && (
+          <View style={styles.subserviceSection}>
+            <Text style={styles.sectionTitle}>{isAllSubcategories ? 'All Quick Services' : 'Choose a service type'}</Text>
+            <Text style={styles.sectionSubtitle}>{isAllSubcategories ? 'Choose a service type to see available work.' : 'Select a sub-service to see available work.'}</Text>
+            <View style={styles.subserviceGrid}>
+              {displayedSubservices.map(subservice => (
+                <Pressable
+                  key={subservice.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Explore ${subservice.title}`}
+                  style={({pressed}) => [styles.subserviceGridCard, pressed && styles.cardPressed]}
+                  onPress={() => navigation.push('Category', {
+                    categoryId: subservice.id,
+                    title: subservice.title,
+                    showServices: true,
+                  })}>
+                  <View style={styles.subserviceGridImageWrap}>
+                    {subservice.imageUrl ? (
+                      <Image source={{uri: subservice.imageUrl}} style={styles.subserviceGridImage} />
+                    ) : (
+                      <Layers color="#006c49" size={28} />
+                    )}
+                    <View style={styles.subserviceArrow}>
+                      <ChevronRight color="#ffffff" size={16} strokeWidth={2.6} />
+                    </View>
+                  </View>
+                  <Text style={styles.subserviceGridTitle} numberOfLines={2}>{subservice.title}</Text>
+                  <Text style={styles.subserviceCount}>{subservice.count} service{subservice.count === 1 ? '' : 's'} available</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+
         {/* Empty / Loading state */}
-        {serviceList.length === 0 && (
+        {showServiceList && serviceList.length === 0 && (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
               <PackageSearch color="#006c49" size={32} strokeWidth={1.8} />
@@ -142,7 +242,7 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
         )}
 
         {/* Service cards */}
-        {serviceList.map(service => (
+        {showServiceList && serviceList.map(service => (
           <Pressable
             key={`${service.id}-${service.workId}`}
             style={({pressed}) => [
@@ -266,6 +366,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    zIndex: 10,
   },
   backBtn: {
     width: 40,
@@ -288,6 +389,28 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   /* ── Empty state ── */
+  allCatalogueSection: {paddingTop: 14, paddingBottom: 8},
+  allCatalogueIntro: {backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8EDF3', borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, shadowColor: '#0F172A', shadowOpacity: 0.035, shadowRadius: 12, shadowOffset: {width: 0, height: 5}, elevation: 1},
+  allCatalogueKicker: {fontFamily: fontFamily.bold, fontSize: 10, letterSpacing: 1.1, color: '#00805B'},
+  allCatalogueTitle: {fontFamily: fontFamily.extraBold, fontSize: 21, lineHeight: 27, color: '#102238', marginTop: 3},
+  allCatalogueSubtitle: {fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: '#667085', marginTop: 3, maxWidth: 220},
+  allCatalogueCount: {width: 58, height: 58, borderRadius: 18, backgroundColor: '#EAF8F2', alignItems: 'center', justifyContent: 'center'},
+  allCatalogueCountNumber: {fontFamily: fontFamily.extraBold, fontSize: 20, color: '#007A56', lineHeight: 23},
+  allCatalogueCountLabel: {fontFamily: fontFamily.medium, fontSize: 9, color: '#347C67'},
+  allCategoryGrid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between'},
+  allCategoryCard: {width: '48.2%', backgroundColor: '#FFFFFF', borderRadius: 18, marginBottom: 15, overflow: 'hidden', borderWidth: 1, borderColor: '#E7ECF2', shadowColor: '#0F172A', shadowOpacity: 0.055, shadowRadius: 12, shadowOffset: {width: 0, height: 5}, elevation: 2},
+  allCategoryFeatured: {width: '100%', flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#FFFFFF'},
+  allCategoryFeaturedImageWrap: {width: '52%', height: 138, borderRadius: 14},
+  allCategoryFeaturedBody: {flex: 1, paddingLeft: 14, paddingRight: 5, paddingVertical: 6},
+  allCategoryFeaturedTitle: {fontSize: 18, lineHeight: 23, minHeight: 46},
+  allCategoryImageWrap: {height: 116, alignItems: 'center', justifyContent: 'center', padding: 10},
+  allCategoryImage: {width: '100%', height: '100%', borderRadius: 12},
+  allCategoryBody: {paddingHorizontal: 11, paddingTop: 10, paddingBottom: 9},
+  allCategoryTitle: {fontFamily: fontFamily.bold, color: '#14233A', fontSize: 14, lineHeight: 18, minHeight: 36},
+  allCategoryMetaRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 7},
+  allCategoryMeta: {fontFamily: fontFamily.medium, color: '#6B778C', fontSize: 11},
+  allCategoryArrow: {width: 27, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center'},
+
   emptyState: {
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -476,6 +599,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   /* ── Subscriptions ── */
+  subserviceSection: {paddingTop: 18, paddingBottom: 8},
+  sectionSubtitle: {fontFamily: fontFamily.regular, color: '#64748B', fontSize: 13, marginTop: 3, marginBottom: 16},
+  subserviceGrid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between'},
+  subserviceGridCard: {width: '48%', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D7EFE7', borderRadius: 18, padding: 9, marginBottom: 14, shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: {width: 0, height: 4}, elevation: 2},
+  subserviceGridImageWrap: {height: 112, borderRadius: 13, backgroundColor: '#E9F8F1', overflow: 'hidden', alignItems: 'center', justifyContent: 'center'},
+  subserviceGridImage: {width: '100%', height: '100%'},
+  subserviceArrow: {position: 'absolute', right: 7, bottom: 7, width: 28, height: 28, borderRadius: 14, backgroundColor: '#006C49', alignItems: 'center', justifyContent: 'center'},
+  subserviceGridTitle: {fontFamily: fontFamily.bold, color: '#0B1C30', fontSize: 13, lineHeight: 18, marginTop: 10, minHeight: 36},
+  subserviceCount: {fontFamily: fontFamily.regular, color: '#64748B', fontSize: 11, marginTop: 3},
+  directServicesTitle: {fontFamily: fontFamily.bold, color: '#0B1C30', fontSize: 17, marginHorizontal: 16, marginTop: 16, marginBottom: 8},
   packageWrap: {
     marginTop: 16,
   },

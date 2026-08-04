@@ -63,6 +63,7 @@ export function MainNavigator(): React.JSX.Element {
   const user = useAppStore(state => state.user);
   const shopCart = useAppStore(state => state.shopCart);
   const requestOpenShopCart = useAppStore(state => state.requestOpenShopCart);
+  const pendingPaymentOrderId = useAppStore(state => state.pendingPaymentOrderId);
   const [isStoreFocused, setIsStoreFocused] = useState(false);
   const cartCount = useMemo(
     () => shopCart.reduce((sum, item) => sum + item.quantity, 0),
@@ -90,7 +91,10 @@ export function MainNavigator(): React.JSX.Element {
   };
 
   return (
-    <Tab.Navigator screenOptions={getScreenOptions}>
+    <Tab.Navigator
+      initialRouteName={pendingPaymentOrderId ? 'Bookings' : 'Home'}
+      screenOptions={getScreenOptions}
+    >
       <Tab.Screen name="Home" component={HomeTab} />
       <Tab.Screen
         name="Bookings"

@@ -1,4 +1,4 @@
-﻿import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,8 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -30,14 +30,15 @@ import {
 } from 'lucide-react-native';
 
 const easypaisaLogo = require('../../assets/images/easypaisa.png');
-import {RootStackParamList} from '@/navigation/types';
-import {useAppStore} from '@/store/useAppStore';
-import {fontFamily} from '@/theme/typography';
-import {formatPkr} from '@/utils/currency';
-import {rounded} from '@/theme/layout';
-import {playConfirmationCue} from '@/utils/confirmationCue';
-import {locateCurrentAddress} from '@/services/locationService';
-import {SavedLocation} from '@/types/models';
+import { RootStackParamList } from '@/navigation/types';
+import { useAppStore } from '@/store/useAppStore';
+import { fontFamily } from '@/theme/typography';
+import { formatPkr } from '@/utils/currency';
+import { rounded } from '@/theme/layout';
+import { playConfirmationCue } from '@/utils/confirmationCue';
+import { locateCurrentAddress } from '@/services/locationService';
+import { SavedLocation } from '@/types/models';
+import { colors } from '@/theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
 
@@ -67,7 +68,7 @@ function getBookingDays() {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
 
-  return Array.from({length: 90}, (_, index) => {
+  return Array.from({ length: 90 }, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() + index);
     date.setHours(12, 0, 0, 0);
@@ -142,6 +143,18 @@ function buildTime(hour: string, minute: string, period: string): string {
   return `${hour}:${minute} ${period}`;
 }
 
+function timeToMinutes(time: string): number {
+  const [clock, period] = time.split(' ');
+  const [hour, minute] = clock.split(':');
+  return to24Hour(hour, period) * 60 + Number(minute || 0);
+}
+
+function isBeforeBookingLeadTime(time: string, selectedDay: number, minimumLeadHours: number): boolean {
+  if (selectedDay !== 0) return false;
+  const now = new Date();
+  const earliestMinutes = now.getHours() * 60 + now.getMinutes() + minimumLeadHours * 60;
+  return timeToMinutes(time) < earliestMinutes;
+}
 function parseTime(time: string): {
   hour: string;
   minute: string;
@@ -150,12 +163,40 @@ function parseTime(time: string): {
   const [clock, period] = time.split(' ');
   const [hour, minute] = clock.split(':');
 
-  return {hour, minute, period};
+  return { hour, minute, period };
 }
 
 const PAYMENT_METHODS = [
-  {id: 'Cash on Service', label: 'Cash on Service', Icon: Banknote, image: null, color: '#006c49'},
-  {id: 'Easypaisa After Work Done', label: 'Easypaisa after work done', Icon: Banknote, image: easypaisaLogo, color: '#16a34a'},
+  //   {
+  //     id: 'Cash on Service',
+  //     label: 'Cash on Service',
+  //     description: 'Pay in full with cash when the service is completed.',
+  //     Icon: Banknote,
+  //     image: null,
+  //     color: '#006c49',
+  //     advanceOnly: false,
+  //     discount: 0,
+  //   },
+  {
+    id: 'Rs 200 Advance',
+    label: 'Book with Rs 200',
+    description: 'Pay Rs 200 now via Easypaisa, and pay the remaining balance after service completion.',
+    Icon: Banknote,
+    image: easypaisaLogo,
+    color: '#16a34a',
+    advanceOnly: false,
+    discount: 0,
+  },
+  {
+    id: 'Full Payment in Advance',
+    label: 'Book with Full Payment',
+    description: 'Pay the full amount now via Easypaisa to receive an exclusive 5% discount.',
+    Icon: Banknote,
+    image: easypaisaLogo,
+    color: '#1d4ed8',
+    advanceOnly: true,
+    discount: 5,
+  },
 ];
 type Coordinate = {
   latitude: number;
@@ -187,8 +228,8 @@ function normalizeTileX(tileX: number) {
   return ((tileX % MAX_TILE_INDEX) + MAX_TILE_INDEX) % MAX_TILE_INDEX;
 }
 
-function CurrentLocationMapPreview({location}: {location: Coordinate}) {
-  const [mapSize, setMapSize] = useState<MapSize>({width: 0, height: 0});
+function CurrentLocationMapPreview({ location }: { location: Coordinate }) {
+  const [mapSize, setMapSize] = useState<MapSize>({ width: 0, height: 0 });
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const centerTileX = lonToTileX(location.longitude);
   const centerTileY = latToTileY(location.latitude);
@@ -197,8 +238,8 @@ function CurrentLocationMapPreview({location}: {location: Coordinate}) {
   const tileOffsets = [-1, 0, 1];
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    const {width, height} = event.nativeEvent.layout;
-    setMapSize({width, height});
+    const { width, height } = event.nativeEvent.layout;
+    setMapSize({ width, height });
   };
 
   return (
@@ -252,7 +293,7 @@ function CurrentLocationMapPreview({location}: {location: Coordinate}) {
   );
 }
 
-export function BookingScreen({navigation, route}: Props): React.JSX.Element {
+export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   const [selectedDay, setSelectedDay] = useState(0);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringEndDay, setRecurringEndDay] = useState(7);
@@ -265,10 +306,11 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
     null,
   );
   const [showAddressForm, setShowAddressForm] = useState(false);
+  const [addressFormVisible, setAddressFormVisible] = useState(false);
   const [addressLabel, setAddressLabel] = useState('');
   const [addressDetail, setAddressDetail] = useState('');
   const [locatingAddress, setLocatingAddress] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState('Easypaisa After Work Done');
+  const [selectedPayment, setSelectedPayment] = useState('Rs 200 Advance');
   const [useRewardPoints, setUseRewardPoints] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -281,6 +323,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
 
   const {
     addToCart,
+    cart,
     checkout,
     addresses,
     fetchAddresses,
@@ -291,6 +334,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
     fetchAppContent,
     user,
     savedServiceLocation,
+    setPendingPaymentOrderId,
     setSavedServiceLocation,
   } = useAppStore();
   const service = services.find(s => s.id === route.params.serviceId);
@@ -323,6 +367,19 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   }, [selectedTime]);
 
   useEffect(() => {
+    const minimumLeadHours = Math.max(0, Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)));
+    if (isBeforeBookingLeadTime(selectedTime, selectedDay, minimumLeadHours)) {
+      const nextSlot = QUICK_TIME_SLOTS.find(slot => !isClosedTime(slot) && !isBeforeBookingLeadTime(slot, selectedDay, minimumLeadHours));
+      if (nextSlot) {
+        const parsed = parseTime(nextSlot);
+        setSelectedTime(nextSlot);
+        setCustomHour(parsed.hour);
+        setCustomMinute(parsed.minute);
+        setCustomPeriod(parsed.period);
+      }
+    }
+  }, [appSettings.minimumBookingLeadHours, selectedDay, selectedTime]);
+  useEffect(() => {
     if (recurringEndDay < selectedDay) {
       setRecurringEndDay(Math.min(selectedDay + 7, bookingDays.length - 1));
     }
@@ -352,7 +409,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   if (!service) {
     return (
       <SafeAreaView style={styles.safe}>
-        <Text style={{color: '#0b1c30', padding: 24}}>
+        <Text style={{ color: '#0b1c30', padding: 24 }}>
           {services.length ? 'Service not found.' : 'Loading service...'}
         </Text>
       </SafeAreaView>
@@ -380,19 +437,36 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   const recurringOccurrences = isRecurring
     ? recurringEndDay - selectedDay + 1
     : 1;
-  const selectedWorkPrice = route.params.specificWorkPriceId
-    ? service.workPrices?.find(
+  const selectedWorkPrices = route.params.specificWorkPriceIds?.length
+    ? service.workPrices?.filter(work =>
+      route.params.specificWorkPriceIds!.map(Number).includes(Number(work.id)),
+    ) || []
+    : route.params.specificWorkPriceId
+      ? service.workPrices?.filter(
         work => Number(work.id) === Number(route.params.specificWorkPriceId),
-      )
-    : service.workPrices?.[0];
-  const bookingWorkPrice = selectedWorkPrice || {
-    id: route.params.specificWorkPriceId || 0,
-    title: route.params.specificWorkTitle || service.title,
-    description: '',
-    price: Number(route.params.specificWorkPrice || service.price),
-  };
-  const serviceUnitPrice = Number(bookingWorkPrice.price || service.price);
-  const serviceSubtotal = serviceUnitPrice * recurringOccurrences;
+      ) || []
+      : service.workPrices?.[0] ? [service.workPrices[0]] : [];
+
+  const bookingWorkPrices = selectedWorkPrices.length
+    ? selectedWorkPrices
+    : [
+      {
+        id: route.params.specificWorkPriceId || 0,
+        title: route.params.specificWorkTitle || service.title,
+        description: '',
+        price: Number(route.params.specificWorkPrice || service.price),
+      },
+    ];
+
+  const serviceUnitPrice = bookingWorkPrices.reduce(
+    (sum, work) => sum + Number(work.price || 0),
+    0,
+  ) || Number(service.price);
+  const cartUnitSubtotal = cart.reduce(
+    (sum, item) => sum + Number(item.service.price || 0) * Number(item.quantity || 0),
+    0,
+  );
+  const serviceSubtotal = (route.params.fromCart ? cartUnitSubtotal : serviceUnitPrice) * recurringOccurrences;
   const maxRewardDiscount = Math.floor(
     (serviceSubtotal * serviceRewardMaxDiscountPercent) / 100,
   );
@@ -404,16 +478,26 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
     canRedeemReward && redeemableRewardValue >= rewardMinimumRedeem;
   const rewardDiscount =
     useRewardPoints && canRedeemRewardForBooking ? redeemableRewardValue : 0;
-  const taxableSubtotal = Math.max(0, serviceSubtotal - rewardDiscount);
+  const selectedPaymentMethod = PAYMENT_METHODS.find(m => m.id === selectedPayment);
+  const fullAdvanceDiscount = selectedPaymentMethod?.discount === 5
+    ? Math.round((serviceSubtotal - rewardDiscount) * 0.05)
+    : 0;
+  const taxableSubtotal = Math.max(0, serviceSubtotal - rewardDiscount - fullAdvanceDiscount);
   const tax = Math.round(
     (taxableSubtotal * Number(appSettings.serviceTaxPercent || 0)) / 100,
   );
   const total = taxableSubtotal + inspectionFee + tax;
   const selectedTimeClosed = isClosedTime(selectedTime);
+  const minimumBookingLeadHours = Math.max(0, Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)));
+  const selectedTimeTooSoon = isBeforeBookingLeadTime(selectedTime, selectedDay, minimumBookingLeadHours);
+  const selectedTimeUnavailable = selectedTimeClosed || selectedTimeTooSoon;
+  const noTimeAvailableToday = selectedDay === 0 && isBeforeBookingLeadTime('10:45 PM', 0, minimumBookingLeadHours);
   const selectedBookingDay = bookingDays[selectedDay] || bookingDays[0];
   const recurringEndBookingDay =
     bookingDays[recurringEndDay] || bookingDays[selectedDay] || bookingDays[0];
-  const selectedWorkTitle = bookingWorkPrice.title || service.title;
+  const selectedWorkTitle = route.params.fromCart
+    ? cart.map(item => String(item.quantity) + 'x ' + (item.service.selectedWorkTitle || item.service.title)).join(', ')
+    : bookingWorkPrices.map(work => work.title).join(', ') || service.title;
   const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
   const serviceLocationAddress = selectedAddress
     ? `${selectedAddress.label}: ${selectedAddress.detail}`
@@ -456,6 +540,14 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
       return false;
     }
 
+    if (isBeforeBookingLeadTime(nextTime, selectedDay, minimumBookingLeadHours)) {
+      showMessage({
+        title: 'Time not available yet',
+        body: `Currently our Workers are busy`,
+        tone: 'warning',
+      });
+      return false;
+    }
     setCustomHour(hour);
     setCustomMinute(minute);
     setCustomPeriod(period);
@@ -493,6 +585,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
       setAddressLabel('');
       setAddressDetail('');
       setShowAddressForm(false);
+      setAddressFormVisible(false);
     } catch (error: any) {
       showMessage({
         title: 'Could not save address',
@@ -545,10 +638,10 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
         'Login required',
         'Please login or create an account to place a service booking.',
         [
-          {text: 'Cancel', style: 'cancel'},
+          { text: 'Cancel', style: 'cancel' },
           {
             text: 'Login',
-            onPress: () => navigation.navigate('Auth', {screen: 'Login'}),
+            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
           },
         ],
       );
@@ -564,15 +657,16 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
       return;
     }
 
-    if (selectedTimeClosed) {
+    if (selectedTimeUnavailable) {
       showMessage({
-        title: 'Closed hours',
-        body: 'UstaadPro is operational from 6:00 AM to 11:00 PM. Please choose 6:00 AM to 10:59 PM.',
+        title: selectedTimeTooSoon ? 'Time not available yet' : 'Closed hours',
+        body: selectedTimeTooSoon
+          ? `Currently Our Workers are Busy.`
+          : 'UstaadPro is operational from 6:00 AM to 11:00 PM. Please choose 6:00 AM to 10:59 PM.',
         tone: 'warning',
       });
       return;
     }
-
     setPrivacyAccepted(false);
     setPrivacyError(false);
     setDetailsConfirmVisible(true);
@@ -615,14 +709,17 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
     try {
       setConfirming(true);
       setDetailsConfirmVisible(false);
-      addToCart({
-        ...service,
-        price: serviceUnitPrice,
-        selectedWorkPrice: bookingWorkPrice,
-        selectedWorkPriceId: bookingWorkPrice.id || undefined,
-        selectedWorkTitle,
+      if (!route.params.fromCart) bookingWorkPrices.forEach(work => {
+        addToCart({
+          ...service,
+          price: Number(work.price || service.price),
+          selectedWorkPrice: work,
+          selectedWorkPriceId: work.id || undefined,
+          selectedWorkTitle: work.title || service.title,
+        });
       });
-      await checkout({
+      if (route.params.fromCart && !cart.length) throw new Error('Your cart is empty. Add a service before booking.');
+      const order = await checkout({
         bookedFor: scheduleLabel,
         paymentMethod: selectedPayment,
         address: serviceLocationAddress,
@@ -632,12 +729,12 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
         recurringOccurrences,
         useRewardPoints: useRewardPoints && canRedeemRewardForBooking,
       });
-      playConfirmationCue();
-      setSuccessVisible(true);
-      setTimeout(() => {
-        setSuccessVisible(false);
-        navigation.navigate('Main', {screen: 'Bookings'});
-      }, 1600);
+
+      // Both supported methods are EasyPaisa advance payments. Persist the
+      // order ID before opening the payment screen, so returning from the
+      // EasyPaisa app can resume receipt upload without creating a duplicate.
+      await setPendingPaymentOrderId(order.id);
+      navigation.navigate('Main', { screen: 'Bookings' });
     } catch (error: any) {
       showMessage({
         title: 'Booking failed',
@@ -650,7 +747,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <>
       <Modal visible={successVisible} transparent animationType="fade">
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
@@ -760,10 +857,56 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
           </View>
         </View>
       </Modal>
+      {/* Address Form Modal */}
+      <Modal
+        visible={addressFormVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAddressFormVisible(false)}
+      >
+        <View style={styles.addressModalOverlay}>
+          <View style={styles.addressModalSheet}>
+            <View style={styles.addressModalHeader}>
+              <View>
+                <Text style={styles.addressModalTitle}>Add New Address</Text>
+                <Text style={styles.addressModalSubtitle}>Enter label and full address details</Text>
+              </View>
+              <Pressable
+                style={styles.addressModalCloseBtn}
+                onPress={() => setAddressFormVisible(false)}
+              >
+                <Text style={styles.addressModalCloseBtnText}>Close</Text>
+              </Pressable>
+            </View>
+            <TextInput
+              value={addressLabel}
+              onChangeText={setAddressLabel}
+              placeholder="Label e.g. Home, Office"
+              placeholderTextColor="#76777d"
+              style={styles.addressInput}
+            />
+            <TextInput
+              value={addressDetail}
+              onChangeText={setAddressDetail}
+              placeholder="Complete address with area and city"
+              placeholderTextColor="#76777d"
+              style={[styles.addressInput, styles.addressTextArea]}
+              multiline
+              textAlignVertical="top"
+            />
+            <Pressable
+              style={styles.saveAddressBtn}
+              onPress={handleSaveAddress}
+            >
+              <Text style={styles.saveAddressText}>Save Address</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={customTimeVisible}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setCustomTimeVisible(false)}
       >
         <View style={styles.clockOverlay}>
@@ -806,7 +949,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
                         hourClosed && styles.clockMiniChipDisabled,
                       ]}
                       disabled={hourClosed}
-                      onPress={() => applyCustomTime({hour})}
+                      onPress={() => applyCustomTime({ hour })}
                     >
                       <Text
                         style={[
@@ -840,13 +983,13 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
                         minuteClosed && styles.clockMiniChipDisabled,
                       ]}
                       disabled={minuteClosed}
-                      onPress={() => applyCustomTime({minute})}
+                      onPress={() => applyCustomTime({ minute })}
                     >
                       <Text
                         style={[
                           styles.clockMiniChipText,
                           customMinute === minute &&
-                            styles.clockMiniChipTextActive,
+                          styles.clockMiniChipTextActive,
                           minuteClosed && styles.clockMiniChipTextDisabled,
                         ]}
                       >
@@ -875,13 +1018,13 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
                         periodClosed && styles.clockMiniChipDisabled,
                       ]}
                       disabled={periodClosed}
-                      onPress={() => applyCustomTime({period})}
+                      onPress={() => applyCustomTime({ period })}
                     >
                       <Text
                         style={[
                           styles.clockMiniChipText,
                           customPeriod === period &&
-                            styles.clockMiniChipTextActive,
+                          styles.clockMiniChipTextActive,
                           periodClosed && styles.clockMiniChipTextDisabled,
                         ]}
                       >
@@ -912,613 +1055,629 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
           </View>
         </View>
       </Modal>
-      {message && (
-        <View
-          style={[
-            styles.messageBanner,
-            message.tone === 'error'
-              ? styles.messageBannerError
-              : styles.messageBannerWarning,
-          ]}
-        >
-          <Text
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        {message && (
+          <View
             style={[
-              styles.messageTitle,
+              styles.messageBanner,
               message.tone === 'error'
-                ? styles.messageTextError
-                : styles.messageTextWarning,
+                ? styles.messageBannerError
+                : styles.messageBannerWarning,
             ]}
           >
-            {message.title}
-          </Text>
-          <Text
-            style={[
-              styles.messageBody,
-              message.tone === 'error'
-                ? styles.messageTextError
-                : styles.messageTextWarning,
-            ]}
-          >
-            {message.body}
-          </Text>
-        </View>
-      )}
-      {/* â”€â”€ Header â”€â”€ */}
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft color="#0b1c30" size={20} strokeWidth={2.2} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Review & Booking</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Contact support on WhatsApp"
-          style={styles.supportBtn}
-          onPress={handleOpenSupport}
-        >
-          <MessageCircle color="#006c49" size={20} strokeWidth={2.2} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* â”€â”€ Pro Card â”€â”€ */}
-        <View style={styles.proCard}>
-          <View style={styles.proAvatar}>
-            {service.imageUrl ? (
-              <Image source={{uri: service.imageUrl}} style={styles.proAvatarImage} />
-            ) : (
-              <Text style={styles.proAvatarText}>
-                {selectedWorkTitle.charAt(0).toUpperCase()}
-              </Text>
-            )}
+            <Text
+              style={[
+                styles.messageTitle,
+                message.tone === 'error'
+                  ? styles.messageTextError
+                  : styles.messageTextWarning,
+              ]}
+            >
+              {message.title}
+            </Text>
+            <Text
+              style={[
+                styles.messageBody,
+                message.tone === 'error'
+                  ? styles.messageTextError
+                  : styles.messageTextWarning,
+              ]}
+            >
+              {message.body}
+            </Text>
           </View>
-          <View style={styles.proInfo}>
-            <Text style={styles.proName}>{selectedWorkTitle}</Text>
-            <Text style={styles.proSpecialty}>{service.title}</Text>
-            <View style={styles.verifiedRow}>
-              <BadgeCheck color="#006c49" size={14} fill="#e6faf3" />
-              <Text style={styles.verifiedText}>VERIFIED PRO</Text>
+        )}
+        {/* â”€â”€ Header â”€â”€ */}
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <ArrowLeft color="#0b1c30" size={20} strokeWidth={2.2} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Review & Booking</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Contact support on WhatsApp"
+            style={styles.supportBtn}
+            onPress={handleOpenSupport}
+          >
+            <MessageCircle color="#006c49" size={20} strokeWidth={2.2} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* â”€â”€ Pro Card â”€â”€ */}
+          <View style={styles.proCard}>
+            <View style={styles.proAvatar}>
+              {service.imageUrl ? (
+                <Image source={{ uri: service.imageUrl }} style={styles.proAvatarImage} />
+              ) : (
+                <Text style={styles.proAvatarText}>
+                  {selectedWorkTitle.charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </View>
+            <View style={styles.proInfo}>
+              <Text style={styles.proName}>{selectedWorkTitle}</Text>
+              <Text style={styles.proSpecialty}>{service.title}</Text>
+              <View style={styles.verifiedRow}>
+                <BadgeCheck color="#006c49" size={14} fill="#e6faf3" />
+                <Text style={styles.verifiedText}>VERIFIED PRO</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* â”€â”€ Date Selector â”€â”€ */}
-        <View style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionTitle}>
-              {isRecurring ? 'Recurring Start' : 'Select Date'}
-            </Text>
-            <Text style={styles.sectionMeta}>
-              {selectedBookingDay.month} {selectedBookingDay.year}
-            </Text>
-          </View>
-          <View style={styles.bookingModeRow}>
-            <Pressable
-              style={[
-                styles.bookingModeChip,
-                !isRecurring && styles.bookingModeChipActive,
-              ]}
-              onPress={() => setIsRecurring(false)}
-            >
-              <Text
-                style={[
-                  styles.bookingModeText,
-                  !isRecurring && styles.bookingModeTextActive,
-                ]}
-              >
-                One-time
+          {/* â”€â”€ Date Selector â”€â”€ */}
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>
+                {isRecurring ? 'Recurring Start' : 'Select Date'}
               </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.bookingModeChip,
-                isRecurring && styles.bookingModeChipActive,
-              ]}
-              onPress={() => {
-                setIsRecurring(true);
-                setRecurringEndDay(current =>
-                  Math.max(
-                    current,
-                    Math.min(selectedDay + 7, bookingDays.length - 1),
-                  ),
-                );
-              }}
-            >
-              <Text
-                style={[
-                  styles.bookingModeText,
-                  isRecurring && styles.bookingModeTextActive,
-                ]}
-              >
-                Recurring
+              <Text style={styles.sectionMeta}>
+                {selectedBookingDay.month} {selectedBookingDay.year}
               </Text>
-            </Pressable>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.dayRow}
-          >
-            {bookingDays.map((day, i) => (
+            </View>
+            <View style={styles.bookingModeRow}>
               <Pressable
-                key={day.key}
                 style={[
-                  styles.dayChip,
-                  selectedDay === i && styles.dayChipActive,
+                  styles.bookingModeChip,
+                  !isRecurring && styles.bookingModeChipActive,
+                ]}
+                onPress={() => setIsRecurring(false)}
+              >
+                <Text
+                  style={[
+                    styles.bookingModeText,
+                    !isRecurring && styles.bookingModeTextActive,
+                  ]}
+                >
+                  One-time
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.bookingModeChip,
+                  isRecurring && styles.bookingModeChipActive,
                 ]}
                 onPress={() => {
-                  setSelectedDay(i);
-                  if (isRecurring && recurringEndDay < i) {
-                    setRecurringEndDay(Math.min(i + 7, bookingDays.length - 1));
-                  }
+                  setIsRecurring(true);
+                  setRecurringEndDay(current =>
+                    Math.max(
+                      current,
+                      Math.min(selectedDay + 7, bookingDays.length - 1),
+                    ),
+                  );
                 }}
               >
                 <Text
                   style={[
-                    styles.dayLabel,
-                    selectedDay === i && styles.dayLabelActive,
+                    styles.bookingModeText,
+                    isRecurring && styles.bookingModeTextActive,
                   ]}
                 >
-                  {day.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.dayNum,
-                    selectedDay === i && styles.dayNumActive,
-                  ]}
-                >
-                  {day.date}
-                </Text>
-                <Text
-                  style={[
-                    styles.dayMonth,
-                    selectedDay === i && styles.dayMonthActive,
-                  ]}
-                >
-                  {day.monthShort}
+                  Recurring
                 </Text>
               </Pressable>
-            ))}
-          </ScrollView>
-
-          {isRecurring && (
-            <View style={styles.recurringBox}>
-              <View style={styles.recurringHeader}>
-                <Text style={styles.recurringTitle}>Recurring End</Text>
-                <Text style={styles.recurringMeta}>{endDateLabel}</Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.dayRow}
-              >
-                {bookingDays.slice(selectedDay).map((day, offset) => {
-                  const dayIndex = selectedDay + offset;
-
-                  return (
-                    <Pressable
-                      key={day.key}
-                      style={[
-                        styles.dayChip,
-                        recurringEndDay === dayIndex && styles.dayChipActive,
-                      ]}
-                      onPress={() => setRecurringEndDay(dayIndex)}
-                    >
-                      <Text
-                        style={[
-                          styles.dayLabel,
-                          recurringEndDay === dayIndex &&
-                            styles.dayLabelActive,
-                        ]}
-                      >
-                        {day.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dayNum,
-                          recurringEndDay === dayIndex && styles.dayNumActive,
-                        ]}
-                      >
-                        {day.date}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dayMonth,
-                          recurringEndDay === dayIndex &&
-                            styles.dayMonthActive,
-                        ]}
-                      >
-                        {day.monthShort}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
             </View>
-          )}
-        </View>
-
-        {/* â”€â”€ Time Slots â”€â”€ */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferred Time</Text>
-
-          <Text style={styles.timeHelp}>
-            Choose any available time. Operational daily from 6:00 AM to 11:00 PM.
-          </Text>
-
-          <Text style={styles.timePeriodLabel}>QUICK TIMES</Text>
-          <View style={styles.timeRow}>
-            {QUICK_TIME_SLOTS.map(slot => {
-              const slotClosed = isClosedTime(slot);
-
-              return (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dayRow}
+            >
+              {bookingDays.map((day, i) => (
                 <Pressable
-                  key={slot}
+                  key={day.key}
                   style={[
-                    styles.timeChip,
-                    selectedTime === slot && styles.timeChipActive,
-                    slotClosed && styles.timeChipDisabled,
+                    styles.dayChip,
+                    selectedDay === i && styles.dayChipActive,
                   ]}
-                  disabled={slotClosed}
-                  onPress={() => applyTime(slot)}
+                  onPress={() => {
+                    setSelectedDay(i);
+                    if (isRecurring && recurringEndDay < i) {
+                      setRecurringEndDay(Math.min(i + 7, bookingDays.length - 1));
+                    }
+                  }}
                 >
                   <Text
                     style={[
-                      styles.timeText,
-                      selectedTime === slot && styles.timeTextActive,
-                      slotClosed && styles.timeTextDisabled,
+                      styles.dayLabel,
+                      selectedDay === i && styles.dayLabelActive,
                     ]}
                   >
-                    {slot}
+                    {day.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dayNum,
+                      selectedDay === i && styles.dayNumActive,
+                    ]}
+                  >
+                    {day.date}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dayMonth,
+                      selectedDay === i && styles.dayMonthActive,
+                    ]}
+                  >
+                    {day.monthShort}
                   </Text>
                 </Pressable>
-              );
-            })}
-          </View>
+              ))}
+            </ScrollView>
 
-          <Pressable
-            style={styles.customTimeButton}
-            onPress={() => setCustomTimeVisible(true)}
-          >
-            <View style={styles.customTimeButtonIcon}>
-              <Clock3 color="#006c49" size={18} />
-            </View>
-            <View style={styles.customTimeButtonCopy}>
-              <Text style={styles.customTimeButtonTitle}>Custom time</Text>
-              <Text style={styles.customTimeButtonMeta}>
-                Open clock picker
-              </Text>
-            </View>
-            <Text style={styles.customTimeButtonValue}>{selectedTime}</Text>
-          </Pressable>
-        </View>
+            {isRecurring && (
+              <View style={styles.recurringBox}>
+                <View style={styles.recurringHeader}>
+                  <Text style={styles.recurringTitle}>Recurring End</Text>
+                  <Text style={styles.recurringMeta}>{endDateLabel}</Text>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dayRow}
+                >
+                  {bookingDays.slice(selectedDay).map((day, offset) => {
+                    const dayIndex = selectedDay + offset;
 
-        {/* â”€â”€ Service Address â”€â”€ */}
-        <View style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionTitle}>Service Address</Text>
-            <Pressable
-              style={styles.addNewRow}
-              onPress={() => setShowAddressForm(value => !value)}
-            >
-              <Plus color="#006c49" size={14} />
-              <Text style={styles.addNewText}>
-                {showAddressForm ? 'Close' : 'Add New'}
-              </Text>
-            </Pressable>
-          </View>
-
-          {savedServiceLocation ? (
-            <Pressable
-              style={[
-                styles.currentLocationCard,
-                !selectedAddressId && styles.addressCardActive,
-              ]}
-              onPressIn={() => {
-                setSelectedAddressId(null);
-              }}
-            >
-              <View style={styles.addressIconBox}>
-                <MapPin
-                  color={!selectedAddressId ? '#006c49' : '#45464d'}
-                  size={20}
-                />
+                    return (
+                      <Pressable
+                        key={day.key}
+                        style={[
+                          styles.dayChip,
+                          recurringEndDay === dayIndex && styles.dayChipActive,
+                        ]}
+                        onPress={() => setRecurringEndDay(dayIndex)}
+                      >
+                        <Text
+                          style={[
+                            styles.dayLabel,
+                            recurringEndDay === dayIndex &&
+                            styles.dayLabelActive,
+                          ]}
+                        >
+                          {day.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dayNum,
+                            recurringEndDay === dayIndex && styles.dayNumActive,
+                          ]}
+                        >
+                          {day.date}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dayMonth,
+                            recurringEndDay === dayIndex &&
+                            styles.dayMonthActive,
+                          ]}
+                        >
+                          {day.monthShort}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
-              <View style={styles.addressInfo}>
-                <View style={styles.currentLocationHeader}>
-                  <Text style={styles.addressLabel}>Current location</Text>
+            )}
+          </View>
+
+          {/* â”€â”€ Time Slots â”€â”€ */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Preferred Time</Text>
+
+            <Text style={styles.timeHelp}>
+              {noTimeAvailableToday ? 'Currently our workers are busy. Please select another date.' : 'Choose a time at least ' + minimumBookingLeadHours + ' hour(s) from now. Operational daily from 6:00 AM to 11:00 PM.'}
+            </Text>
+
+            <Text style={styles.timePeriodLabel}>QUICK TIMES</Text>
+            <View style={styles.timeRow}>
+              {QUICK_TIME_SLOTS.map(slot => {
+                const slotClosed = isClosedTime(slot);
+                const slotTooSoon = isBeforeBookingLeadTime(slot, selectedDay, minimumBookingLeadHours);
+                const slotUnavailable = slotClosed || slotTooSoon;
+
+                return (
                   <Pressable
-                    style={styles.currentLocationUpdate}
-                    onPress={event => {
-                      event.stopPropagation();
-                      void handleLocateAddress();
-                    }}
-                    disabled={locatingAddress}
+                    key={slot}
+                    style={[
+                      styles.timeChip,
+                      selectedTime === slot && styles.timeChipActive,
+                      slotUnavailable && styles.timeChipDisabled,
+                    ]}
+                    disabled={slotUnavailable}
+                    onPress={() => applyTime(slot)}
                   >
-                    <LocateFixed color="#006c49" size={14} strokeWidth={2.3} />
-                    <Text style={styles.currentLocationUpdateText}>
-                      {locatingAddress ? 'Updating...' : 'Update'}
+                    <Text
+                      style={[
+                        styles.timeText,
+                        selectedTime === slot && styles.timeTextActive,
+                        slotUnavailable && styles.timeTextDisabled,
+                      ]}
+                    >
+                      {slot}
                     </Text>
                   </Pressable>
-                </View>
-                <Text style={styles.addressDetail}>
-                  {savedServiceLocation.address}
-                </Text>
-                {typeof savedServiceLocation.latitude === 'number' &&
-                typeof savedServiceLocation.longitude === 'number' ? (
-                  <CurrentLocationMapPreview
-                    location={{
-                      latitude: savedServiceLocation.latitude,
-                      longitude: savedServiceLocation.longitude,
-                    }}
-                  />
-                ) : null}
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable
-              style={styles.locateButton}
-              onPress={handleLocateAddress}
-              disabled={locatingAddress}
-            >
-              <LocateFixed color="#006c49" size={17} strokeWidth={2.3} />
-              <Text style={styles.locateButtonText}>
-                {locatingAddress
-                  ? 'Detecting location...'
-                  : 'Use current location'}
-              </Text>
-            </Pressable>
-          )}
+                );
+              })}
+            </View>
 
-          {addresses.map(addr => (
             <Pressable
-              key={addr.id}
               style={[
-                styles.addressCard,
-                selectedAddressId === addr.id && styles.addressCardActive,
+                styles.customTimeButton,
+                noTimeAvailableToday && styles.customTimeButtonDisabled,
               ]}
-              onPress={() => setSelectedAddressId(addr.id)}
+              disabled={noTimeAvailableToday}
+              onPress={() => setCustomTimeVisible(true)}
             >
-              <View style={styles.addressIconBox}>
-                <MapPin
-                  color={selectedAddressId === addr.id ? '#006c49' : '#45464d'}
-                  size={20}
-                />
+              <View style={styles.customTimeButtonIcon}>
+                <Clock3 color="#006c49" size={18} />
               </View>
-              <View style={styles.addressInfo}>
-                <Text style={styles.addressLabel}>{addr.label}</Text>
-                <Text style={styles.addressDetail}>{addr.detail}</Text>
+              <View style={styles.customTimeButtonCopy}>
+                <Text style={styles.customTimeButtonTitle}>Custom time</Text>
+                <Text style={styles.customTimeButtonMeta}>
+                  Open clock picker
+                </Text>
               </View>
+              <Text style={styles.customTimeButtonValue}>{selectedTime}</Text>
             </Pressable>
-          ))}
+          </View>
 
-          {(showAddressForm || addresses.length === 0) && (
-            <View style={styles.addressForm}>
-              <Text style={styles.addressFormTitle}>Save a new address</Text>
-              {/* <Pressable
+          {/* â”€â”€ Service Address â”€â”€ */}
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>Service Address</Text>
+              <Pressable
+                style={styles.addNewRow}
+                onPress={() => setAddressFormVisible(true)}
+              >
+                <Plus color="#006c49" size={14} />
+                <Text style={styles.addNewText}>Add New</Text>
+              </Pressable>
+            </View>
+
+            {savedServiceLocation ? (
+              <Pressable
                 style={[
-                  styles.locateButton,
-                  locatingAddress && styles.locateButtonDisabled,
+                  styles.currentLocationCard,
+                  !selectedAddressId && styles.addressCardActive,
                 ]}
+                onPressIn={() => {
+                  setSelectedAddressId(null);
+                }}
+              >
+                <View style={styles.addressIconBox}>
+                  <MapPin
+                    color={!selectedAddressId ? '#006c49' : '#45464d'}
+                    size={20}
+                  />
+                </View>
+                <View style={styles.addressInfo}>
+                  <View style={styles.currentLocationHeader}>
+                    <Text style={styles.addressLabel}>Current location</Text>
+                    <Pressable
+                      style={styles.currentLocationUpdate}
+                      onPress={event => {
+                        event.stopPropagation();
+                        void handleLocateAddress();
+                      }}
+                      disabled={locatingAddress}
+                    >
+                      <LocateFixed color="#006c49" size={14} strokeWidth={2.3} />
+                      <Text style={styles.currentLocationUpdateText}>
+                        {locatingAddress ? 'Updating...' : 'Update'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.addressDetail}>
+                    {savedServiceLocation.address}
+                  </Text>
+                  {typeof savedServiceLocation.latitude === 'number' &&
+                    typeof savedServiceLocation.longitude === 'number' ? (
+                    <CurrentLocationMapPreview
+                      location={{
+                        latitude: savedServiceLocation.latitude,
+                        longitude: savedServiceLocation.longitude,
+                      }}
+                    />
+                  ) : null}
+                </View>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={styles.locateButton}
                 onPress={handleLocateAddress}
                 disabled={locatingAddress}
               >
                 <LocateFixed color="#006c49" size={17} strokeWidth={2.3} />
                 <Text style={styles.locateButtonText}>
-                  {locatingAddress ? 'Locating...' : 'Locate your location'}
+                  {locatingAddress
+                    ? 'Detecting location...'
+                    : 'Use current location'}
                 </Text>
-              </Pressable> */}
-              <TextInput
-                value={addressLabel}
-                onChangeText={setAddressLabel}
-                placeholder="Label e.g. Home, Office"
-                placeholderTextColor="#76777d"
-                style={styles.addressInput}
-              />
-              <TextInput
-                value={addressDetail}
-                onChangeText={setAddressDetail}
-                placeholder="Complete address with area and city"
-                placeholderTextColor="#76777d"
-                style={[styles.addressInput, styles.addressTextArea]}
-                multiline
-                textAlignVertical="top"
-              />
-              <Pressable
-                style={styles.saveAddressBtn}
-                onPress={handleSaveAddress}
-              >
-                <Text style={styles.saveAddressText}>Save Address</Text>
               </Pressable>
-            </View>
-          )}
-        </View>
+            )}
 
-        {/* â”€â”€ Special Instructions â”€â”€ */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Special Instructions</Text>
-          <TextInput
-            value={specialInstructions}
-            onChangeText={setSpecialInstructions}
-            multiline
-            numberOfLines={3}
-            placeholder="e.g. Please bring a tall ladder, or call before arriving."
-            placeholderTextColor="#76777d"
-            style={styles.textArea}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* â”€â”€ Payment Method â”€â”€ */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-          {PAYMENT_METHODS.map(method => (
-            <Pressable
-              key={method.id}
-              style={styles.paymentRow}
-              onPress={() => setSelectedPayment(method.id)}
-            >
-              <View
+            {addresses.map(addr => (
+              <Pressable
+                key={addr.id}
                 style={[
-                  styles.paymentIconBox,
-                  method.image
-                    ? styles.paymentIconBoxBrand
-                    : {backgroundColor: method.color + '18'},
+                  styles.addressCard,
+                  selectedAddressId === addr.id && styles.addressCardActive,
                 ]}
+                onPress={() => setSelectedAddressId(addr.id)}
               >
-                {method.image ? (
-                  <Image
-                    source={method.image}
-                    style={styles.paymentBrandImage}
-                    resizeMode="contain"
+                <View style={styles.addressIconBox}>
+                  <MapPin
+                    color={selectedAddressId === addr.id ? '#006c49' : '#45464d'}
+                    size={20}
                   />
-                ) : (
-                  method.Icon && <method.Icon color={method.color} size={20} />
-                )}
-              </View>
-              <Text style={styles.paymentLabel}>{method.label}</Text>
-              <View
-                style={[
-                  styles.radioCircle,
-                  selectedPayment === method.id && styles.radioCircleActive,
-                ]}
-              >
-                {selectedPayment === method.id && (
-                  <View style={styles.radioInner} />
-                )}
-              </View>
-            </Pressable>
-          ))}
-        </View>
+                </View>
+                <View style={styles.addressInfo}>
+                  <Text style={styles.addressLabel}>{addr.label}</Text>
+                  <Text style={styles.addressDetail}>{addr.detail}</Text>
+                </View>
+              </Pressable>
+            ))}
 
-        {/* â”€â”€ Fee Summary â”€â”€ */}
-        {rewardEnabled && user ? (
-          <Pressable
-            style={[
-              styles.rewardBox,
-              useRewardPoints && styles.rewardBoxActive,
-              !canRedeemRewardForBooking && styles.rewardBoxDisabled,
-            ]}
-            onPress={() => {
-              if (canRedeemRewardForBooking) {
-                setUseRewardPoints(current => !current);
-              }
-            }}
-          >
-            <View style={styles.rewardIconBox}>
-              <Gift color="#006c49" size={20} strokeWidth={2.3} />
-            </View>
-            <View style={styles.rewardCopy}>
-              <Text style={styles.rewardTitle}>Reward points</Text>
-              <Text style={styles.rewardText}>
-                You have {rewardPoints} points worth{' '}
-                {formatPkr(rewardBalanceValue)}.
-              </Text>
-              <Text style={styles.rewardHint}>
-                {canRedeemRewardForBooking
-                  ? `Use up to ${formatPkr(
+            {addresses.length === 0 && !savedServiceLocation && (
+              <Pressable
+                style={styles.addAddressHint}
+                onPress={() => setAddressFormVisible(true)}
+              >
+                <Plus color="#006c49" size={16} />
+                <Text style={styles.addAddressHintText}>Tap "Add New" to save a service address</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* â”€â”€ Special Instructions â”€â”€ */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Special Instructions</Text>
+            <TextInput
+              value={specialInstructions}
+              onChangeText={setSpecialInstructions}
+              multiline
+              numberOfLines={3}
+              placeholder="e.g. Please bring a tall ladder, or call before arriving."
+              placeholderTextColor="#76777d"
+              style={styles.textArea}
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* ——— Payment Method ——— */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.paymentNote}>
+              Easypaisa account: {appSettings.supportPhone || 'Contact support for details'}
+            </Text>
+            {PAYMENT_METHODS.map(method => {
+              const isSelected = selectedPayment === method.id;
+              return (
+                <Pressable
+                  key={method.id}
+                  style={[
+                    styles.paymentRow,
+                    isSelected && styles.paymentRowActive,
+                  ]}
+                  onPress={() => setSelectedPayment(method.id)}
+                >
+                  <View
+                    style={[
+                      styles.paymentIconBox,
+                      method.image
+                        ? styles.paymentIconBoxBrand
+                        : { backgroundColor: method.color + '18' },
+                    ]}
+                  >
+                    {method.image ? (
+                      <Image
+                        source={method.image}
+                        style={styles.paymentBrandImage}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      method.Icon && <method.Icon color={method.color} size={20} />
+                    )}
+                  </View>
+                  <View style={styles.paymentLabelBox}>
+                    <Text style={[
+                      styles.paymentLabel,
+                      isSelected && styles.paymentLabelActive,
+                    ]}>
+                      {method.label}
+                      {method.discount > 0 ? (
+                        <Text style={styles.paymentDiscountBadge}> ●  {method.discount}% OFF</Text>
+                      ) : null}
+                    </Text>
+                    <Text style={styles.paymentDescription}>{method.description}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      isSelected && styles.radioCircleActive,
+                    ]}
+                  >
+                    {isSelected && (
+                      <View style={styles.radioInner} />
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* ——— Fee Summary ——— */}
+          {rewardEnabled && user ? (
+            <Pressable
+              style={[
+                styles.rewardBox,
+                useRewardPoints && styles.rewardBoxActive,
+                !canRedeemRewardForBooking && styles.rewardBoxDisabled,
+              ]}
+              onPress={() => {
+                if (canRedeemRewardForBooking) {
+                  setUseRewardPoints(current => !current);
+                }
+              }}
+            >
+              <View style={styles.rewardIconBox}>
+                <Gift color="#006c49" size={20} strokeWidth={2.3} />
+              </View>
+              <View style={styles.rewardCopy}>
+                <Text style={styles.rewardTitle}>Reward points</Text>
+                <Text style={styles.rewardText}>
+                  You have {rewardPoints} points worth{' '}
+                  {formatPkr(rewardBalanceValue)}.
+                </Text>
+                <Text style={styles.rewardHint}>
+                  {canRedeemRewardForBooking
+                    ? `Use up to ${formatPkr(
                       redeemableRewardValue,
                     )} off this service. Earn ${serviceRewardPointsOnCompletion} point after completion.`
-                  : rewardPointsNeeded > 0
-                    ? `${rewardPointsNeeded} more point(s) needed to redeem rewards.`
-                    : `Reward discount is below the ${formatPkr(rewardMinimumRedeem)} minimum for this booking.`}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.rewardCheckbox,
-                useRewardPoints && styles.rewardCheckboxChecked,
-              ]}
-            >
-              {useRewardPoints ? (
-                <Check color="#ffffff" size={14} strokeWidth={3} />
-              ) : null}
-            </View>
-          </Pressable>
-        ) : null}
-
-        <View style={styles.summaryBox}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>
-              Service Fee
-              {isRecurring ? ` (${recurringOccurrences} days)` : ''}
-            </Text>
-            <Text style={styles.summaryValue}>
-              {formatPkr(serviceSubtotal)}
-            </Text>
-          </View>
-          {isRecurring && (
-            <View style={styles.summaryRowCompact}>
-              <Text style={styles.summaryHint}>
-                {formatPkr(serviceUnitPrice)} x {recurringOccurrences} days
-              </Text>
-            </View>
-          )}
-          {rewardDiscount > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text style={styles.rewardSummaryLabel}>
-                Reward discount ({Math.round(rewardDiscount / rewardPointValue)} points)
-              </Text>
-              <Text style={styles.rewardSummaryValue}>
-                -{formatPkr(rewardDiscount)}
-              </Text>
-            </View>
+                    : rewardPointsNeeded > 0
+                      ? `${rewardPointsNeeded} more point(s) needed to redeem rewards.`
+                      : `Reward discount is below the ${formatPkr(rewardMinimumRedeem)} minimum for this booking.`}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.rewardCheckbox,
+                  useRewardPoints && styles.rewardCheckboxChecked,
+                ]}
+              >
+                {useRewardPoints ? (
+                  <Check color="#ffffff" size={14} strokeWidth={3} />
+                ) : null}
+              </View>
+            </Pressable>
           ) : null}
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Inspection Fee</Text>
-            <Text style={styles.summaryValue}>{formatPkr(inspectionFee)}</Text>
+
+          <View style={styles.summaryBox}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>
+                Service Fee
+                {isRecurring ? ` (${recurringOccurrences} days)` : ''}
+              </Text>
+              <Text style={styles.summaryValue}>
+                {formatPkr(serviceSubtotal)}
+              </Text>
+            </View>
+            {isRecurring && (
+              <View style={styles.summaryRowCompact}>
+                <Text style={styles.summaryHint}>
+                  {formatPkr(serviceUnitPrice)} x {recurringOccurrences} days
+                </Text>
+              </View>
+            )}
+            {rewardDiscount > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.rewardSummaryLabel}>
+                  Reward discount ({Math.round(rewardDiscount / rewardPointValue)} points)
+                </Text>
+                <Text style={styles.rewardSummaryValue}>
+                  -{formatPkr(rewardDiscount)}
+                </Text>
+              </View>
+            ) : null}
+            {fullAdvanceDiscount > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.rewardSummaryLabel}>Full advance discount (5%)</Text>
+                <Text style={styles.rewardSummaryValue}>-{formatPkr(fullAdvanceDiscount)}</Text>
+              </View>
+            ) : null}
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Inspection Fee</Text>
+              <Text style={styles.summaryValue}>{formatPkr(inspectionFee)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>
+                Platform charges ({appSettings.serviceTaxPercent}%)
+              </Text>
+              <Text style={styles.summaryValue}>{formatPkr(tax)}</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryTotalLabel}>Total Amount</Text>
+              <Text style={styles.summaryTotal}>{formatPkr(total)}</Text>
+            </View>
+            {selectedPayment === 'Rs 200 Advance' && (
+              <View style={styles.advanceNote}>
+                <Text style={styles.advanceNoteText}>
+                  Rs 200 advance via Easypaisa required. Remaining {formatPkr(Math.max(0, total - 200))} payable after service.
+                </Text>
+              </View>
+            )}
+            {selectedPayment === 'Full Payment in Advance' && (
+              <View style={styles.advanceNoteGreen}>
+                <Text style={styles.advanceNoteGreenText}>
+                  Full amount {formatPkr(total)} payable via Easypaisa in advance. 5% discount already applied!
+                </Text>
+              </View>
+            )}
+            <View style={styles.scheduledRow}>
+              <Text style={styles.scheduledLabel}>
+                Scheduled For: {scheduleLabel}
+              </Text>
+              <Text style={styles.scheduledPrice}>{formatPkr(total)}</Text>
+            </View>
           </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>
-              Platform charges ({appSettings.serviceTaxPercent}%)
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        {/* ——— Footer CTA ——— */}
+        <View style={styles.footer}>
+          <Pressable
+            style={[
+              styles.confirmBtn,
+              (confirming || selectedTimeUnavailable) && styles.confirmBtnDisabled,
+            ]}
+            onPress={handleConfirmBooking}
+            disabled={confirming || successVisible || selectedTimeUnavailable}
+          >
+            <Text style={styles.confirmText}>
+              {confirming ? 'Confirming...' : 'Confirm Booking'}
             </Text>
-            <Text style={styles.summaryValue}>{formatPkr(tax)}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryTotalLabel}>Total Amount</Text>
-            <Text style={styles.summaryTotal}>{formatPkr(total)}</Text>
-          </View>
-          <View style={styles.scheduledRow}>
-            <Text style={styles.scheduledLabel}>
-              Scheduled For: {scheduleLabel}
-            </Text>
-            <Text style={styles.scheduledPrice}>{formatPkr(total)}</Text>
-          </View>
+            <Zap
+              color="#ffffff"
+              size={18}
+              fill="#ffffff"
+              style={styles.zapIcon}
+            />
+          </Pressable>
         </View>
-
-        <View style={{height: 100}} />
-      </ScrollView>
-
-      {/* â”€â”€ Footer CTA â”€â”€ */}
-      <View style={styles.footer}>
-        <Pressable
-          style={[
-            styles.confirmBtn,
-            (confirming || selectedTimeClosed) && styles.confirmBtnDisabled,
-          ]}
-          onPress={handleConfirmBooking}
-          disabled={confirming || successVisible || selectedTimeClosed}
-        >
-          <Text style={styles.confirmText}>
-            {confirming ? 'Confirming...' : 'Confirm Booking'}
-          </Text>
-          <Zap
-            color="#ffffff"
-            size={18}
-            fill="#ffffff"
-            style={styles.zapIcon}
-          />
-        </Pressable>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#f8f9ff'},
+  safe: { flex: 1, backgroundColor: '#f8f9ff' },
   messageBanner: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -1569,7 +1728,7 @@ const styles = StyleSheet.create({
     shadowColor: '#0b1c30',
     shadowOpacity: 0.18,
     shadowRadius: 24,
-    shadowOffset: {width: 0, height: 14},
+    shadowOffset: { width: 0, height: 14 },
   },
   successIconWrap: {
     width: 86,
@@ -1611,7 +1770,7 @@ const styles = StyleSheet.create({
     shadowColor: '#0b1c30',
     shadowOpacity: 0.18,
     shadowRadius: 24,
-    shadowOffset: {width: 0, height: 14},
+    shadowOffset: { width: 0, height: 14 },
   },
   confirmTitle: {
     fontFamily: fontFamily.bold,
@@ -1731,6 +1890,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     height: 56,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   backBtn: {
     width: 40,
@@ -1758,7 +1919,7 @@ const styles = StyleSheet.create({
     color: '#0b1c30',
   },
 
-  content: {paddingBottom: 20},
+  content: { paddingBottom: 20 },
 
   // Pro Card
   proCard: {
@@ -1792,8 +1953,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: '#0b1c30',
   },
-  proInfo: {flex: 1},
-  proName: {fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30'},
+  proInfo: { flex: 1 },
+  proName: { fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30' },
   proSpecialty: {
     fontFamily: fontFamily.regular,
     fontSize: 13,
@@ -1814,7 +1975,7 @@ const styles = StyleSheet.create({
   },
 
   // Sections
-  section: {paddingHorizontal: 16, paddingVertical: 16},
+  section: { paddingHorizontal: 16, paddingVertical: 16 },
   sectionHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1861,7 +2022,7 @@ const styles = StyleSheet.create({
   bookingModeTextActive: {
     color: '#ffffff',
   },
-  dayRow: {flexDirection: 'row', gap: 8, paddingRight: 16},
+  dayRow: { flexDirection: 'row', gap: 8, paddingRight: 16 },
   dayChip: {
     width: 68,
     minHeight: 72,
@@ -1882,21 +2043,21 @@ const styles = StyleSheet.create({
     color: '#76777d',
     letterSpacing: 0.5,
   },
-  dayLabelActive: {color: '#bec6e0'},
+  dayLabelActive: { color: '#bec6e0' },
   dayNum: {
     fontFamily: fontFamily.bold,
     fontSize: 17,
     color: '#0b1c30',
     marginTop: 2,
   },
-  dayNumActive: {color: '#ffffff'},
+  dayNumActive: { color: '#ffffff' },
   dayMonth: {
     fontFamily: fontFamily.bold,
     fontSize: 10,
     color: '#76777d',
     marginTop: 2,
   },
-  dayMonthActive: {color: '#bec6e0'},
+  dayMonthActive: { color: '#bec6e0' },
   recurringBox: {
     borderRadius: rounded.lg,
     borderWidth: 1,
@@ -1968,9 +2129,9 @@ const styles = StyleSheet.create({
     borderColor: '#e1e4ed',
     opacity: 0.55,
   },
-  timeText: {fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30'},
-  timeTextActive: {color: '#ffffff'},
-  timeTextDisabled: {color: '#76777d'},
+  timeText: { fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30' },
+  timeTextActive: { color: '#ffffff' },
+  timeTextDisabled: { color: '#76777d' },
   customTimeButton: {
     minHeight: 70,
     borderRadius: rounded.lg,
@@ -1997,6 +2158,9 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     color: '#0b1c30',
     fontSize: 15,
+  },
+  customTimeButtonDisabled: {
+    opacity: 0.55,
   },
   customTimeButtonMeta: {
     fontFamily: fontFamily.regular,
@@ -2371,8 +2535,8 @@ const styles = StyleSheet.create({
   },
 
   // Address
-  addNewRow: {flexDirection: 'row', alignItems: 'center', gap: 4},
-  addNewText: {fontFamily: fontFamily.bold, fontSize: 13, color: '#006c49'},
+  addNewRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  addNewText: { fontFamily: fontFamily.bold, fontSize: 13, color: '#006c49' },
   addressCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2407,7 +2571,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addressInfo: {flex: 1},
+  addressInfo: { flex: 1 },
   currentLocationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2476,7 +2640,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b1c30',
     borderWidth: 3,
     borderColor: '#ffffff',
-    transform: [{rotate: '45deg'}],
+    transform: [{ rotate: '45deg' }],
   },
   currentLocationPinDot: {
     position: 'absolute',
@@ -2488,7 +2652,7 @@ const styles = StyleSheet.create({
     marginTop: -15.5,
     borderRadius: 3.5,
     backgroundColor: '#ffffff',
-  },  addressLabel: {fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30'},
+  }, addressLabel: { fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30' },
   addressDetail: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
@@ -2613,7 +2777,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioCircleActive: {borderColor: '#006c49'},
+  radioCircleActive: { borderColor: '#006c49' },
   radioInner: {
     width: 10,
     height: 10,
@@ -2725,14 +2889,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#006c49',
   },
-  summaryValue: {fontFamily: fontFamily.medium, fontSize: 14, color: '#0b1c30'},
-  summaryDivider: {height: 1, backgroundColor: '#e5eeff', marginVertical: 4},
+  summaryValue: { fontFamily: fontFamily.medium, fontSize: 14, color: '#0b1c30' },
+  summaryDivider: { height: 1, backgroundColor: '#e5eeff', marginVertical: 4 },
   summaryTotalLabel: {
     fontFamily: fontFamily.bold,
     fontSize: 15,
     color: '#0b1c30',
   },
-  summaryTotal: {fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30'},
+  summaryTotal: { fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30' },
   scheduledRow: {
     backgroundColor: '#f8f9ff',
     borderRadius: rounded.default,
@@ -2748,7 +2912,7 @@ const styles = StyleSheet.create({
     color: '#45464d',
     flex: 1,
   },
-  scheduledPrice: {fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30'},
+  scheduledPrice: { fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30' },
 
   // Footer
   footer: {
@@ -2774,8 +2938,134 @@ const styles = StyleSheet.create({
   confirmBtnDisabled: {
     opacity: 0.72,
   },
-  confirmText: {fontFamily: fontFamily.bold, color: '#ffffff', fontSize: 16},
-  zapIcon: {marginLeft: 4},
+  paymentRowActive: {
+    borderRadius: rounded.lg,
+    backgroundColor: '#f0fbf6',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    paddingHorizontal: 10,
+    marginHorizontal: -10,
+    marginBottom: 4,
+  },
+  paymentLabelBox: { flex: 1 },
+  paymentLabelActive: { color: '#006c49' },
+  paymentDescription: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: '#76777d',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  paymentDiscountBadge: {
+    fontFamily: fontFamily.bold,
+    fontSize: 11,
+    color: '#1d4ed8',
+  },
+  paymentNote: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: '#45464d',
+    marginBottom: 8,
+    lineHeight: 17,
+  },
+  // Advance payment notes
+  advanceNote: {
+    backgroundColor: '#fffbeb',
+    borderRadius: rounded.default,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    padding: 10,
+    marginTop: 8,
+  },
+  advanceNoteText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: '#92400e',
+    lineHeight: 17,
+  },
+  advanceNoteGreen: {
+    backgroundColor: '#f0fbf6',
+    borderRadius: rounded.default,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    padding: 10,
+    marginTop: 8,
+  },
+  advanceNoteGreenText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: '#006c49',
+    lineHeight: 17,
+  },
+  // Address modal
+  addressModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(11,28,48,0.42)',
+    justifyContent: 'flex-end',
+  },
+  addressModalSheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 40,
+    elevation: 20,
+    shadowColor: '#0b1c30',
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -8 },
+  },
+  addressModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  addressModalTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    color: '#0b1c30',
+  },
+  addressModalSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: '#76777d',
+    marginTop: 3,
+  },
+  addressModalCloseBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: rounded.default,
+    backgroundColor: '#f8f9ff',
+    borderWidth: 1,
+    borderColor: '#e5eeff',
+  },
+  addressModalCloseBtnText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 13,
+    color: '#45464d',
+  },
+  // Add address hint
+  addAddressHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: rounded.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#006c49',
+    backgroundColor: '#f0fbf6',
+    marginTop: 8,
+  },
+  addAddressHintText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: '#006c49',
+  },
+  confirmText: { fontFamily: fontFamily.bold, color: '#ffffff', fontSize: 16 },
+  zapIcon: { marginLeft: 4 },
 });
 
 

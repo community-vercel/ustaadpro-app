@@ -6,6 +6,19 @@ export interface ServiceCategory {
   subtitle: string;
   icon: string;
   tint: string;
+  imageUrl?: string;
+  webImageUrl?: string;
+  mobileIconUrl?: string;
+}
+
+export interface ServiceSubcategory {
+  id: string;
+  categoryId: string;
+  title: string;
+  description?: string;
+  imageUrl?: string;
+  webImageUrl?: string;
+  mobileIconUrl?: string;
 }
 
 export interface ServiceWorkPrice {
@@ -50,6 +63,7 @@ export interface HomeSlide {
   buttonLabel: string;
   categoryId: ServiceCategoryId;
   categoryTitle: string;
+  redirectType?: 'category' | 'all_services' | 'quick_services' | 'subscriptions';
   visual: string;
   imageUrl?: string;
   primaryColor: string;
@@ -61,6 +75,7 @@ export interface HomeSlide {
 export interface AppSettings {
   inspectionFee: number;
   serviceTaxPercent: number;
+  minimumBookingLeadHours: number;
   currency: 'PKR' | string;
   supportPhone: string;
   shippingCost: number;
@@ -171,6 +186,7 @@ export interface ShopOrder {
 }
 
 export type OrderStatus =
+  | 'checking_receipt'
   | 'confirmed'
   | 'assigned'
   | 'in_progress'
@@ -201,8 +217,18 @@ export interface Order {
     status: string;
     createdAt: string;
     updatedAt?: string;
+    paymentStage?: 'advance' | 'remaining' | 'full';
   } | null;
-  createdAt: string;
+  paymentReceipts?: Array<{
+    id: number;
+    receiptUrl: string;
+    amount: number;
+    accountNumber: string;
+    accountTitle: string;
+    status: string;
+    paymentStage?: 'advance' | 'remaining' | 'full';
+    createdAt: string;
+  }>;  createdAt: string;
 }
 
 export interface AppNotification {

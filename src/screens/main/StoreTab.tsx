@@ -35,7 +35,7 @@ import {RootStackParamList} from '@/navigation/types';
 import {useAppStore} from '@/store/useAppStore';
 import {ShopProduct} from '@/types/models';
 import {colors} from '@/theme/colors';
-import {fontFamily, type} from '@/theme/typography';
+import {fontFamily} from '@/theme/typography';
 import {rounded} from '@/theme/layout';
 import {formatPkr} from '@/utils/currency';
 import {playConfirmationCue} from '@/utils/confirmationCue';
@@ -86,16 +86,26 @@ export function StoreTab(): React.JSX.Element {
   const [useRewardPoints, setUseRewardPoints] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchShopProducts({reset: true, category: 'All'}), fetchAppContent()]).finally(() =>
-      setLoading(false),
-    );
-  }, [fetchAppContent, fetchShopProducts]);
+    const loadStore = async () => {
+      try {
+        await Promise.all([
+          fetchShopProducts({reset: true, category: 'All'}),
+          fetchAppContent(),
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadStore();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      fetchShopProducts({reset: true, category: activeCategory}).catch(() =>
+      fetchShopProducts({reset: true, category: activeCategory, search: query}).catch(() =>
         setMessage('Could not refresh store products.'),
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeCategory, fetchShopProducts]),
   );
 
@@ -134,17 +144,19 @@ export function StoreTab(): React.JSX.Element {
     return categories.find(category => category.name === activeCategory)?.total || 0;
   }, [activeCategory, categories, shopProducts.length]);
 
-  const filteredProducts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return shopProducts.filter(product => {
-      const matchesQuery =
-        !normalizedQuery ||
-        product.title.toLowerCase().includes(normalizedQuery) ||
-        product.description.toLowerCase().includes(normalizedQuery) ||
-        product.category.toLowerCase().includes(normalizedQuery);
-      return matchesQuery;
-    });
-  }, [query, shopProducts]);
+  // Debounce search: when query changes, re-fetch from server after 400ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchShopProducts({reset: true, category: activeCategory, search: query}).catch(() =>
+        setMessage('Could not search products.'),
+      );
+    }, 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, activeCategory]);
+
+  // Products from store are already filtered by server; just use them directly
+  const filteredProducts = shopProducts;
 
   const cartCount = useMemo(
     () => shopCart.reduce((sum, item) => sum + item.quantity, 0),
@@ -205,7 +217,7 @@ export function StoreTab(): React.JSX.Element {
       nativeEvent.contentSize.height - 260;
 
     if (distanceFromBottom && shopProductsHasMore && !shopProductsLoadingMore) {
-      void fetchShopProducts({category: activeCategory});
+      void fetchShopProducts({category: activeCategory, search: query});
     }
   };
 
@@ -362,7 +374,7 @@ export function StoreTab(): React.JSX.Element {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <>
       <Modal visible={successVisible} transparent animationType="fade">
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
@@ -575,58 +587,6 @@ export function StoreTab(): React.JSX.Element {
                     </Text>
                   </View>
                 </View>
-                {selectedCartItem ? (
-                  <View style={styles.detailQtyPanel}>
-                    <View>
-                      <Text style={styles.detailQtyLabel}>In cart</Text>
-                      <Text style={styles.detailQtyTotal}>
-                        {formatPkr(
-                          selectedProduct.price * selectedCartItem.quantity,
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.detailQtyControl}>
-                      <Pressable
-                        style={styles.detailQtyButton}
-                        onPress={() =>
-                          changeProductQuantity(
-                            selectedProduct,
-                            selectedCartItem.quantity - 1,
-                          )
-                        }
-                      >
-                        <Minus color={colors.ink} size={17} strokeWidth={2.4} />
-                      </Pressable>
-                      <Text style={styles.detailQtyText}>
-                        {selectedCartItem.quantity}
-                      </Text>
-                      <Pressable
-                        style={[
-                          styles.detailQtyButton,
-                          selectedCartItem.quantity >= selectedProduct.stock &&
-                            styles.detailQtyButtonDisabled,
-                        ]}
-                        onPress={() =>
-                          changeProductQuantity(
-                            selectedProduct,
-                            selectedCartItem.quantity + 1,
-                          )
-                        }
-                        disabled={selectedCartItem.quantity >= selectedProduct.stock}
-                      >
-                        <Plus
-                          color={
-                            selectedCartItem.quantity >= selectedProduct.stock
-                              ? colors.muted
-                              : colors.ink
-                          }
-                          size={17}
-                          strokeWidth={2.4}
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
                 </ScrollView>
                 <View style={styles.detailFooterActions}>
                   <Pressable
@@ -650,11 +610,7 @@ export function StoreTab(): React.JSX.Element {
                   >
                     <ShoppingCart color="#ffffff" size={18} strokeWidth={2.3} />
                     <Text style={styles.detailAddText}>
-                      {selectedProduct.stock <= 0
-                        ? 'Out of stock'
-                        : selectedCartItem
-                          ? 'Add one more'
-                          : 'Add to cart'}
+                      {selectedProduct.stock <= 0 ? 'Out of stock' : 'Add'}
                     </Text>
                   </Pressable>
                   {cartCount > 0 ? (
@@ -960,7 +916,40 @@ export function StoreTab(): React.JSX.Element {
         </View>
       </Modal>
 
+      <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Home"
+            style={styles.headerBackButton}
+            onPress={() => navigation.navigate('Main', {screen: 'Home'})}
+          >
+            <ArrowLeft color={colors.ink} size={20} strokeWidth={2.3} />
+          </Pressable>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Store</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              Products for repairs, cleaning, and home care.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={styles.ordersButton}
+            onPress={() => navigation.navigate('ShoppingOrders')}
+          >
+            <Text style={styles.ordersButtonText}>Orders</Text>
+          </Pressable>
+          <Pressable style={styles.cartBadge} onPress={() => setCartVisible(true)}>
+            <ShoppingCart color={colors.secondary} size={20} strokeWidth={2.3} />
+            <Text style={styles.cartBadgeText}>{cartCount}</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -974,36 +963,6 @@ export function StoreTab(): React.JSX.Element {
         onScroll={handleProductsScroll}
         scrollEventThrottle={250}
       >
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to Home"
-              style={styles.headerBackButton}
-              onPress={() => navigation.navigate('Main', {screen: 'Home'})}
-            >
-              <ArrowLeft color={colors.ink} size={20} strokeWidth={2.3} />
-            </Pressable>
-            <View style={styles.headerCopy}>
-              <Text style={styles.title}>Store</Text>
-              <Text style={styles.subtitle} numberOfLines={1}>
-                Products for repairs, cleaning, and home care.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.headerActions}>
-            <Pressable
-              style={styles.ordersButton}
-              onPress={() => navigation.navigate('ShoppingOrders')}
-            >
-              <Text style={styles.ordersButtonText}>Orders</Text>
-            </Pressable>
-            <Pressable style={styles.cartBadge} onPress={() => setCartVisible(true)}>
-              <ShoppingCart color={colors.secondary} size={20} strokeWidth={2.3} />
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </Pressable>
-          </View>
-        </View>
 
         {message ? (
           <View style={styles.notice}>
@@ -1049,7 +1008,7 @@ export function StoreTab(): React.JSX.Element {
               onPress={() => {
                 setActiveCategory(category.name);
                 setQuery('');
-                void fetchShopProducts({reset: true, category: category.name});
+                void fetchShopProducts({reset: true, category: category.name, search: ''});
               }}
             >
               <Text
@@ -1120,57 +1079,19 @@ export function StoreTab(): React.JSX.Element {
                     <Text style={styles.productPrice}>
                       {formatPkr(product.price)}
                     </Text>
-                    {inCart ? (
-                      <View style={styles.cardQtyControl}>
-                        <Pressable
-                          style={styles.cardQtyButton}
-                          onPress={event => {
-                            event.stopPropagation();
-                            changeProductQuantity(product, inCart.quantity - 1);
-                          }}
-                        >
-                          <Minus color={colors.ink} size={14} strokeWidth={2.4} />
-                        </Pressable>
-                        <Text style={styles.cardQtyText}>{inCart.quantity}</Text>
-                        <Pressable
-                          style={[
-                            styles.cardQtyButton,
-                            inCart.quantity >= product.stock &&
-                              styles.cardQtyButtonDisabled,
-                          ]}
-                          onPress={event => {
-                            event.stopPropagation();
-                            changeProductQuantity(product, inCart.quantity + 1);
-                          }}
-                          disabled={inCart.quantity >= product.stock}
-                        >
-                          <Plus
-                            color={
-                              inCart.quantity >= product.stock
-                                ? colors.muted
-                                : colors.ink
-                            }
-                            size={14}
-                            strokeWidth={2.4}
-                          />
-                        </Pressable>
-                      </View>
-                    ) : (
-                      <Pressable
-                        style={[
-                          styles.addIconButton,
-                          product.stock <= 0 && styles.disabledAddIconButton,
-                        ]}
-                        onPress={event => {
-                          event.stopPropagation();
-                          addProduct(product);
-                        }}
-                        disabled={product.stock <= 0}
-                      >
-                        <Plus color="#ffffff" size={17} strokeWidth={2.5} />
-                      </Pressable>
-                    )}
-                  </View>
+                    <Pressable
+                      style={[
+                        styles.cardAddButton,
+                        product.stock <= 0 && styles.disabledAddIconButton,
+                      ]}
+                      onPress={event => {
+                        event.stopPropagation();
+                        addProduct(product);
+                      }}
+                      disabled={product.stock <= 0 || Boolean(inCart && inCart.quantity >= product.stock)}
+                    >
+                      <Text style={styles.cardAddText}>{product.stock <= 0 ? 'Out' : 'Add'}</Text>
+                    </Pressable></View>
                 </Pressable>
               );
             })}
@@ -1185,19 +1106,22 @@ export function StoreTab(): React.JSX.Element {
         ) : shopProductsHasMore ? (
           <Pressable
             style={styles.productLoadHint}
-            onPress={() => fetchShopProducts({category: activeCategory})}
+            onPress={() => fetchShopProducts({category: activeCategory, search: query})}
           >
             <Text style={styles.productLoadHintText}>Load more products</Text>
           </Pressable>
         ) : shopProducts.length > 0 ? (
           <View style={styles.productLoadHint}>
-            <Text style={styles.productLoadHintText}>All products loaded</Text>
+            <Text style={styles.productLoadHintText}>
+              {query ? `All results for "${query}" loaded` : 'All products loaded'}
+            </Text>
           </View>
         ) : null}
 
         <View style={{height: 120}} />
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -1215,8 +1139,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     minHeight: 48,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     gap: 10,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   headerLeft: {
     flex: 1,
@@ -1490,7 +1417,20 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
   },
-  addIconButton: {
+  cardAddButton: {
+    minWidth: 48,
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: rounded.full,
+    backgroundColor: colors.authDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardAddText: {
+    fontFamily: fontFamily.bold,
+    color: '#ffffff',
+    fontSize: 12,
+  },  addIconButton: {
     width: 34,
     height: 34,
     borderRadius: 17,

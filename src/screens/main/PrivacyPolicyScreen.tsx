@@ -72,7 +72,7 @@ export function PrivacyPolicyScreen({
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={{flex: 1}} contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>Your privacy matters</Text>
           <Text style={styles.heroText}>
@@ -123,6 +123,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   backButton: {
     width: 40,

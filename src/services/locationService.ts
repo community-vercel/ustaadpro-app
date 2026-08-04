@@ -123,6 +123,8 @@ export function getStaticMapPreviewUrl({
     `&size=${width}x${height}` +
     '&scale=2' +
     '&maptype=roadmap' +
+    '&language=en' +
+    '&region=PK' +
     `&markers=color:green%7C${marker}` +
     `&key=${GOOGLE_MAPS_API_KEY}`
   );
@@ -156,7 +158,7 @@ export async function locatePinnedAddress(
 }
 async function reverseGeocode({latitude, longitude}: NativeLocation) {
   const response = await fetch(
-    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`,
+    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&language=en&region=PK&key=${GOOGLE_MAPS_API_KEY}`,
   );
 
   if (!response.ok) {
@@ -181,6 +183,7 @@ async function reverseGeocodeWithOpenStreetMap({
     'format=jsonv2',
     'addressdetails=1',
     'zoom=18',
+    'accept-language=en',
     `lat=${latitude}`,
     `lon=${longitude}`,
   ].join('&');

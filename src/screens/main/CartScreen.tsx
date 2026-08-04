@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -20,7 +20,7 @@ import { rounded } from '@/theme/layout';
 type Props = NativeStackScreenProps<RootStackParamList, 'Cart'>;
 
 export function CartScreen({ navigation }: Props): React.JSX.Element {
-  const { cart, appSettings, fetchAppContent, user } = useAppStore();
+  const {cart, appSettings, fetchAppContent, user, removeFromCart, updateCartQuantity} = useAppStore();
 
   useEffect(() => {
     fetchAppContent();
@@ -44,17 +44,18 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
 
     // Navigate to Booking screen to complete checkout details
     // For now we just pass a dummy string to bypass the type error if we want, but better to navigate
-    navigation.navigate('Booking', { serviceId: cart[0].service.id });
+    navigation.navigate('Booking', {serviceId: cart[0].service.id, fromCart: true});
   };
 
   const subtotal = cart.reduce(
     (sum, item) => sum + item.service.price * item.quantity,
     0,
   );
+  const inspectionFee = Number(appSettings.inspectionFee || 0);
   const tax = Math.round(
     (subtotal * Number(appSettings.serviceTaxPercent || 0)) / 100,
   );
-  const total = subtotal + tax;
+  const total = subtotal + inspectionFee + tax;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -67,7 +68,7 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
           >
             <ArrowLeft color="#0b1c30" size={24} strokeWidth={2} />
           </Pressable>
-          <Text style={styles.headerTitle}>Your Cart</Text>
+          <Text style={styles.headerTitle}>Service Cart</Text>
         </View>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{cart.length} items</Text>
@@ -75,6 +76,7 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
       </View>
 
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
@@ -82,7 +84,7 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
           <Text style={styles.emptyText}>Your cart is empty.</Text>
         ) : (
           cart.map((item, index) => (
-            <View key={index} style={styles.cartCard}>
+            <View key={[item.service.id, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id || 'direct'].join('-')} style={styles.cartCard}>
               <View
                 style={[
                   styles.itemImagePlaceholder,
@@ -94,32 +96,22 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
                   },
                 ]}
               >
-                {/* Placeholder for image */}
+                {item.service.imageUrl ? <Image source={{uri: item.service.imageUrl}} style={styles.itemImage} resizeMode="cover" /> : null}
               </View>
               <View style={styles.itemInfo}>
                 <View style={styles.itemTopRow}>
                   <Text style={styles.itemTitle}>{item.service.selectedWorkTitle || item.service.title}</Text>
-                  <Pressable>
-                    <Trash2 color="#45464d" size={20} />
-                  </Pressable>
+                  <Pressable onPress={() => removeFromCart(item.service.id, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Trash2 color="#45464d" size={20} /></Pressable>
                 </View>
                 <Text style={styles.itemDuration}>
                   🕒 {item.service.duration}
                 </Text>
                 <View style={styles.itemBottomRow}>
-                  <Text style={styles.itemPrice}>
-                    {formatPkr(item.service.price)}
-                  </Text>
+                  <Text style={styles.itemPrice}>{formatPkr(item.service.price * item.quantity)}</Text>
                   <View style={styles.quantityControl}>
-                    <Pressable style={styles.qtyBtn}>
-                      <Minus color="#76777d" size={16} />
-                    </Pressable>
+                    <Pressable style={styles.qtyBtn} onPress={() => updateCartQuantity(item.service.id, item.quantity - 1, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Minus color="#76777d" size={16} /></Pressable>
                     <Text style={styles.qtyText}>{item.quantity}</Text>
-                    <Pressable
-                      style={[styles.qtyBtn, { backgroundColor: '#000' }]}
-                    >
-                      <Plus color="#fff" size={16} />
-                    </Pressable>
+                    <Pressable style={[styles.qtyBtn, {backgroundColor: '#000'}]} onPress={() => updateCartQuantity(item.service.id, item.quantity + 1, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Plus color="#fff" size={16} /></Pressable>
                   </View>
                 </View>
               </View>
@@ -137,15 +129,13 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
-                Platform charges ({appSettings.serviceTaxPercent}%)
-              </Text>
-              <Text style={styles.summaryValue}>{formatPkr(tax)}</Text>
+              <Text style={styles.summaryLabel}>Inspection fee</Text>
+              <Text style={styles.summaryValue}>{formatPkr(inspectionFee)}</Text>
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Estimated Duration</Text>
-              <Text style={styles.summaryValue}>~5 hours total</Text>
+              <Text style={styles.summaryLabel}>Platform charges ({appSettings.serviceTaxPercent}%)</Text>
+              <Text style={styles.summaryValue}>{formatPkr(tax)}</Text>
             </View>
 
             <View style={styles.summaryDivider} />
@@ -155,13 +145,7 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
               <Text style={styles.summaryTotalValue}>{formatPkr(total)}</Text>
             </View>
 
-            <View style={styles.guaranteeBox}>
-              <ShieldCheck color="#000" size={20} />
-              <Text style={styles.guaranteeText}>
-                Your services are covered under the UstaadPro Guarantee for 30
-                days after completion.
-              </Text>
-            </View>
+
           </View>
         )}
       </ScrollView>
@@ -194,6 +178,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    backgroundColor: '#f8f9ff',
+    zIndex: 10,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -246,6 +232,7 @@ const styles = StyleSheet.create({
     borderRadius: rounded.lg,
     marginRight: 16,
   },
+  itemImage: {width: '100%', height: '100%', borderRadius: rounded.lg},
   itemInfo: {
     flex: 1,
     justifyContent: 'space-between',

@@ -41,6 +41,7 @@ import {
   Hammer,
   Anvil,
   Cctv,
+  Layers,
   AlertCircle,
 } from 'lucide-react-native';
 import {RootStackParamList} from '@/navigation/types';
@@ -62,14 +63,6 @@ function profilePhotoKey(user?: {email?: string; phone?: string} | null) {
     ? `${PROFILE_PHOTO_KEY_PREFIX}:${ownerKey.toLowerCase()}`
     : null;
 }
-
-const INSTANT_SERVICES = [
-  {id: 'electrician', label: 'Electrician', Icon: Zap, color: '#F59E0B'},
-  {id: 'plumbers', label: 'Plumbers', Icon: Wrench, color: '#0891B2'},
-  {id: 'home-cleaning', label: 'Home Cleaning', Icon: Sparkles, color: '#006c49'},
-  {id: 'ac-services', label: 'AC Services', Icon: Wind, color: '#4F46E5'},
-  {id: 'dry-cleaning', label: 'Dry Cleaning', Icon: PaintBucket, color: '#DB2777'},
-];
 
 const FALLBACK_HEADER_SLIDES: HomeSlide[] = [
   {
@@ -181,6 +174,7 @@ export function HomeTab(): React.JSX.Element {
     isGuest,
     services,
     categories,
+    subcategories,
     homeSlides,
     fetchServices,
     fetchAppContent,
@@ -197,21 +191,35 @@ export function HomeTab(): React.JSX.Element {
   const [sortOption, setSortOption] = useState<SortOption>('default');
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
   const drawerX = useRef(new Animated.Value(-320)).current;
+  const drawerClosing = useRef(false);
+  const drawerOverlayOpacity = useRef(new Animated.Value(0)).current;
   const {width: viewportWidth} = useWindowDimensions();
   const [activeSlide, setActiveSlide] = useState(0);
   const slides = homeSlides.length ? homeSlides : FALLBACK_HEADER_SLIDES;
-  const instantServiceChipWidth = Math.max(86, (viewportWidth - 32) / 3);
+  const instantServiceChipWidth = Math.max(64, (viewportWidth - 56) / 4);
   const currentLocationText =
     savedServiceLocation?.address || 'Set your current location';
   const banner = slides[activeSlide] || slides[0];
-  const instantServices = categories.length
-    ? categories.map(category => ({
-        id: category.id,
-        label: category.title,
-        Icon: categoryIcon(category),
-        color: category.tint || '#006c49',
-      }))
-    : INSTANT_SERVICES;
+  // Main categories are managed from the admin catalogue. An empty catalogue
+  // must stay empty instead of falling back to demo categories.
+  const instantServices = categories.map(category => ({
+    id: category.id,
+    label: category.title,
+    Icon: categoryIcon(category),
+    color: category.tint || '#006c49',
+    imageUrl: category.mobileIconUrl || category.imageUrl || '',
+  }));
+  const quickServices = useMemo(() =>
+    subcategories
+      .map(subcategory => {
+        const category = categories.find(item => item.id === subcategory.categoryId);
+        const firstService = services.find(item => item.subcategoryId === subcategory.id);
+        return {id: subcategory.id, title: subcategory.title, categoryTitle: category?.title || 'Home Services', imageUrl: subcategory.mobileIconUrl || subcategory.webImageUrl || subcategory.imageUrl || firstService?.imageUrl || '', serviceCount: services.filter(item => item.subcategoryId === subcategory.id).length};
+      })
+      .filter(item => item.serviceCount > 0),
+    [categories, services, subcategories],
+  );
+
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredServices = useMemo(() => {
     const terms = normalizedSearch.split(/\s+/).filter(Boolean);
@@ -311,7 +319,7 @@ export function HomeTab(): React.JSX.Element {
             : navigation.navigate('Auth', {screen: 'Login'}),
       },
       {
-        label: 'Cart',
+        label: 'Service Cart',
         Icon: ShoppingCart,
         onPress: () => navigation.navigate('Cart'),
       },
@@ -395,28 +403,47 @@ export function HomeTab(): React.JSX.Element {
   }, [slides.length]);
 
   const openDrawer = () => {
+    drawerClosing.current = false;
     drawerX.setValue(-320);
+    drawerOverlayOpacity.setValue(0);
     setMenuVisible(true);
     requestAnimationFrame(() => {
-      Animated.timing(drawerX, {
-        toValue: 0,
-        duration: 240,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(drawerX, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(drawerOverlayOpacity, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start();
     });
   };
 
   const closeDrawer = (afterClose?: () => void) => {
-    Animated.timing(drawerX, {
-      toValue: -320,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
+    if (drawerClosing.current) return;
+    drawerClosing.current = true;
+    Animated.parallel([
+      Animated.timing(drawerX, {
+        toValue: -320,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(drawerOverlayOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(({finished}) => {
+      if (!finished) return;
       setMenuVisible(false);
+      drawerClosing.current = false;
       afterClose?.();
     });
   };
-
   const handleMenuPress = (onPress: () => void) => {
     closeDrawer(onPress);
   };
@@ -426,10 +453,24 @@ export function HomeTab(): React.JSX.Element {
   };
 
   const openBanner = (slide: HomeSlide) => {
-    navigation.navigate('Category', {
-      categoryId: slide.categoryId,
-      title: slide.categoryTitle,
-    });
+    if (slide.redirectType === 'all_services') {
+      navigation.navigate('Category', {categoryId: 'all' as ServiceCategoryId, title: 'All Services'});
+      return;
+    }
+    if (slide.redirectType === 'quick_services') {
+      navigation.navigate('Category', {categoryId: 'all-subcategories' as ServiceCategoryId, title: 'Quick Services'});
+      return;
+    }
+    if (slide.redirectType === 'subscriptions') {
+      navigation.navigate('Category', {categoryId: 'subscriptions' as ServiceCategoryId, title: 'Maintenance Packages'});
+      return;
+    }
+    const categoryHasServices = services.some(service => service.categoryId === slide.categoryId);
+    if (!categoryHasServices) {
+      navigation.navigate('Category', {categoryId: 'all' as ServiceCategoryId, title: 'All Services'});
+      return;
+    }
+    navigation.navigate('Category', {categoryId: slide.categoryId, title: slide.categoryTitle});
   };
 
   const handleRefresh = async () => {
@@ -448,15 +489,17 @@ export function HomeTab(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Modal
-        visible={menuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => closeDrawer()}
-      >
-        <Pressable style={styles.menuOverlay} onPress={() => closeDrawer()}>
+      {menuVisible ? (
+
+        <Animated.View style={[styles.menuOverlay, {opacity: drawerOverlayOpacity}]}>
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => closeDrawer()}
+          />
           <Animated.View
             style={[styles.menuPanel, {transform: [{translateX: drawerX}]}]}
+          
+            onStartShouldSetResponder={() => true}
           >
             <View style={styles.menuHeader}>
               <Pressable
@@ -524,8 +567,8 @@ export function HomeTab(): React.JSX.Element {
               </Pressable>
             ))}
           </Animated.View>
-        </Pressable>
-      </Modal>
+        </Animated.View>
+      ) : null}
 
       <Modal
         visible={filterVisible}
@@ -560,18 +603,9 @@ export function HomeTab(): React.JSX.Element {
                 return (
                   <Pressable
                     key={item.id}
-                    style={[
-                      styles.filterChip,
-                      isActive && styles.filterChipActive,
-                    ]}
-                    onPress={() => setSelectedCategoryId(item.id)}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        isActive && styles.filterChipTextActive,
-                      ]}
-                    >
+                    style={[styles.filterChip, isActive && styles.filterChipActive]}
+                    onPress={() => setSelectedCategoryId(item.id)}>
+                    <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
                       {item.title}
                     </Text>
                   </Pressable>
@@ -591,18 +625,9 @@ export function HomeTab(): React.JSX.Element {
                 return (
                   <Pressable
                     key={item.id}
-                    style={[
-                      styles.filterOption,
-                      isActive && styles.filterOptionActive,
-                    ]}
-                    onPress={() => setSortOption(item.id as SortOption)}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        isActive && styles.filterOptionTextActive,
-                      ]}
-                    >
+                    style={[styles.filterOption, isActive && styles.filterOptionActive]}
+                    onPress={() => setSortOption(item.id as SortOption)}>
+                    <Text style={[styles.filterOptionText, isActive && styles.filterOptionTextActive]}>
                       {item.label}
                     </Text>
                   </Pressable>
@@ -634,8 +659,60 @@ export function HomeTab(): React.JSX.Element {
         </Pressable>
       </Modal>
 
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+          style={({pressed}) => [styles.menuBtn, pressed && styles.pressed]}
+          onPress={openDrawer}
+        >
+          <Menu color="#0b1c30" size={22} strokeWidth={2.2} />
+        </Pressable>
+        <Pressable 
+          style={({pressed}) => [styles.locationField, pressed && {opacity: 0.7}]}
+          onPress={() => setLocationPromptVisible(true)}
+        >
+          <View style={styles.locationIconBubble}>
+            <MapPin color="#006c49" size={15} strokeWidth={2.5} />
+          </View>
+          <View style={styles.locationCopy}>
+            <Text style={styles.locationLabel} numberOfLines={1}>
+              {isGuest ? 'Guest Location' : 'Current Location'}
+            </Text>
+            <Text style={styles.locationText} numberOfLines={2}>
+              {currentLocationText}
+            </Text>
+          </View>
+        </Pressable>
+        <View style={styles.headerActions}>
+          <NotificationCenter />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={user ? 'Open profile' : 'Login'}
+            style={({pressed}) => [styles.avatar, pressed && styles.pressed]}
+            onPress={() =>
+              user
+                ? navigation.navigate('Main', {screen: 'Profile'})
+                : navigation.navigate('Auth', {screen: 'Login'})
+            }
+          >
+            {profilePhotoUri ? (
+              <Image
+                source={{uri: profilePhotoUri}}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <Text style={styles.avatarText}>
+                {user?.name?.slice(0, 1) || 'U'}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
+
       <ScrollView
-        style={styles.container}
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -647,58 +724,6 @@ export function HomeTab(): React.JSX.Element {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* â”€â”€ Header â”€â”€ */}
-        <View style={styles.header}>
-          <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open menu"
-            style={({pressed}) => [styles.menuBtn, pressed && styles.pressed]}
-            onPress={openDrawer}
-          >
-            <Menu color="#0b1c30" size={22} strokeWidth={2.2} />
-          </Pressable>
-          <Pressable 
-            style={({pressed}) => [styles.locationField, pressed && {opacity: 0.7}]}
-            onPress={() => setLocationPromptVisible(true)}
-          >
-            <View style={styles.locationIconBubble}>
-              <MapPin color="#006c49" size={15} strokeWidth={2.5} />
-            </View>
-            <View style={styles.locationCopy}>
-              <Text style={styles.locationLabel} numberOfLines={1}>
-                {isGuest ? 'Guest Location' : 'Current Location'}
-              </Text>
-              <Text style={styles.locationText} numberOfLines={2}>
-                {currentLocationText}
-              </Text>
-            </View>
-          </Pressable>
-          <View style={styles.headerActions}>
-            <NotificationCenter />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={user ? 'Open profile' : 'Login'}
-              style={({pressed}) => [styles.avatar, pressed && styles.pressed]}
-              onPress={() =>
-                user
-                  ? navigation.navigate('Main', {screen: 'Profile'})
-                  : navigation.navigate('Auth', {screen: 'Login'})
-              }
-            >
-              {profilePhotoUri ? (
-                <Image
-                  source={{uri: profilePhotoUri}}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <Text style={styles.avatarText}>
-                  {user?.name?.slice(0, 1) || 'U'}
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
         {/* â”€â”€ Search â”€â”€ */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
@@ -746,9 +771,7 @@ export function HomeTab(): React.JSX.Element {
           style={({pressed}) => pressed && styles.bannerPressed}
         >
           <LinearGradient
-            colors={
-              [banner.primaryColor, banner.secondaryColor] as [string, string]
-            }
+            colors={['#006C49', '#006C49'] as [string, string]}
             start={{x: 0, y: 0}}
             end={{x: 1, y: 1}}
             style={styles.banner}
@@ -783,6 +806,7 @@ export function HomeTab(): React.JSX.Element {
                 </Text>
               )}
             </View>
+            <View style={styles.bannerImageCurve} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Show next banner"
@@ -801,7 +825,7 @@ export function HomeTab(): React.JSX.Element {
         <View style={styles.dotsRow}>
           {slides.map((slide, slideIndex) => (
             <Pressable
-              key={slide.title}
+              key={`${slide.id || 'slide'}-${slideIndex}`}
               accessibilityRole="button"
               accessibilityLabel={`Show banner ${slideIndex + 1}`}
               onPress={() => setActiveSlide(slideIndex)}
@@ -815,7 +839,7 @@ export function HomeTab(): React.JSX.Element {
 
         {/* â”€â”€ Instant Services â”€â”€ */}
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Instant Services</Text>
+          <Text style={styles.sectionTitle}>Our Services</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="View all services"
@@ -830,20 +854,22 @@ export function HomeTab(): React.JSX.Element {
               })
             }
           >
-            <Text style={styles.viewAllText}>View All</Text>
+            <Text style={styles.viewAllText}>See All</Text>
             <ChevronRight color="#006c49" size={16} />
           </Pressable>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-        >
-          {instantServices.map(item => (
+        <View style={styles.categoryGrid}>
+          {instantServices.slice(0, 8).map(item => (
             <Pressable
               key={item.id}
-              style={[styles.chip, {width: instantServiceChipWidth}]}
+              accessibilityRole="button"
+              accessibilityLabel={`Explore ${item.label} services`}
+              style={({pressed}) => [
+                styles.categoryCard,
+                {width: instantServiceChipWidth},
+                pressed && styles.categoryCardPressed,
+              ]}
               onPress={() =>
                 navigation.navigate('Category', {
                   categoryId: item.id as ServiceCategoryId,
@@ -851,112 +877,64 @@ export function HomeTab(): React.JSX.Element {
                 })
               }
             >
-              <View
-                style={[styles.chipIcon, {backgroundColor: item.color + '18'}]}
-              >
-                <item.Icon color={item.color} size={25} strokeWidth={2.1} />
+              <View style={styles.categoryImageFrame}>
+                {item.imageUrl ? (
+                  <Image source={{uri: item.imageUrl}} style={styles.categoryImage} />
+                ) : (
+                  <View style={[styles.categoryIconFallback, {backgroundColor: item.color + '18'}]}>
+                    <item.Icon color={item.color} size={27} strokeWidth={2.1} />
+                  </View>
+                )}
               </View>
-              <Text style={styles.chipLabel}>{item.label}</Text>
+              <Text style={styles.chipLabel} numberOfLines={2}>{item.label}</Text>
             </Pressable>
           ))}
-        </ScrollView>
-
-        {/* â”€â”€ Our Services â”€â”€ */}
-        <View style={styles.servicesHeader}>
-          <Text style={styles.sectionTitle2}>
-            {normalizedSearch || activeFilterCount ? 'Filtered Services' : 'Our Services'}
-          </Text>
-          {(normalizedSearch || activeFilterCount > 0) && (
-            <Text style={styles.resultCount}>
-              {filteredServices.length} found
-            </Text>
-          )}
         </View>
 
-        {filteredServices.length === 0 && (normalizedSearch || activeFilterCount) ? (
-          <View style={styles.noResultsCard}>
-            <View style={styles.noResultsIcon}>
-              <Search color="#006c49" size={24} strokeWidth={2.2} />
+        {quickServices.length > 0 && (
+          <View style={styles.quickSection}>
+            <View style={styles.quickHeader}>
+              <View>
+                <Text style={styles.quickTitle}>Quick Services</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="View all services" style={({pressed}) => [styles.viewAllRow, pressed && styles.pressed]} onPress={() => navigation.navigate('Category', {categoryId: 'all-subcategories' as ServiceCategoryId, title: 'Quick Services'})}>
+                <Text style={styles.viewAllText}>View All</Text>
+                <ChevronRight color="#006c49" size={16} />
+              </Pressable>
             </View>
-            <Text style={styles.noResultsTitle}>No result found</Text>
-            <Text style={styles.noResultsText}>
-              Try another service name like AC, plumbing, cleaning, geyser,
-              sofa, or water tank.
-            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScrollContent}>
+              {quickServices.map(item => (
+                <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={'Explore ' + item.title} style={({pressed}) => [styles.quickCard, pressed && styles.categoryCardPressed]} onPress={() => navigation.navigate('Category', {categoryId: item.id as ServiceCategoryId, title: item.title, showServices: true})}>
+                  <View style={styles.quickImageWrap}>
+                    {item.imageUrl ? <Image source={{uri: item.imageUrl}} style={styles.quickImage} /> : <Layers color="#006c49" size={25} />}
+                  </View>
+                  <Text style={styles.quickCardTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.quickCardMeta} numberOfLines={1}>{item.categoryTitle} ? {item.serviceCount} service{item.serviceCount === 1 ? '' : 's'}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
-        ) : null}
+        )}
 
-        {filteredServices.map(service => (
+        {(normalizedSearch || activeFilterCount > 0) && (
+          <View style={styles.servicesHeader}>
+            <Text style={styles.sectionTitle2}>Filtered Services</Text>
+            <Text style={styles.resultCount}>{filteredServices.length} found</Text>
+          </View>
+        )}
+        {(normalizedSearch || activeFilterCount > 0) && filteredServices.map(service => (
           <Pressable
             key={service.id}
             style={styles.serviceCard}
-            onPress={() =>
-              navigation.navigate('Detail', {serviceId: service.id})
-            }
-          >
-            {/* Service image / hero band */}
-            <View
-              style={[
-                styles.serviceHero,
-                {
-                  backgroundColor:
-                    service.categoryId === 'home-cleaning' ||
-                    service.categoryId === 'dry-cleaning' ||
-                    service.categoryId === 'cleaning'
-                      ? '#e5eeff'
-                      : service.categoryId === 'ac-services' ||
-                          service.categoryId === 'home'
-                        ? '#dce9ff'
-                        : '#d3e4fe',
-                },
-              ]}
-            >
-              {service.imageUrl ? (
-                <Image
-                  source={{uri: service.imageUrl}}
-                  style={styles.serviceHeroImage}
-                  resizeMode="cover"
-                />
-              ) : null}
-
-              <View style={styles.heroOverlayChip}>
-                <Text style={styles.heroOverlayText} numberOfLines={1}>
-                  {service.title}
-                </Text>
-              </View>
-            </View>
-
-            {/* Card body */}
+            onPress={() => navigation.navigate('Detail', {serviceId: service.id})}>
             <View style={styles.serviceBody}>
-              <Text style={styles.serviceDescription} numberOfLines={1}>
-                {service.description}
-              </Text>
-
-              <Text style={styles.startsFrom}>
-                {service.categoryId === 'subscriptions'
-                  ? 'From'
-                  : service.serviceType || 'Standard Visit'}
-              </Text>
-
-              <View style={styles.priceBookRow}>
-                <Text style={styles.servicePrice}>
-                  {formatPkr(service.price)}
-                </Text>
-                <Pressable
-                  style={styles.bookBtn}
-                  onPress={() =>
-                    navigation.navigate('Detail', {serviceId: service.id})
-                  }
-                >
-                  <Text style={styles.bookBtnText}>Book Service</Text>
-                </Pressable>
-              </View>
+              <Text style={styles.serviceName}>{service.title}</Text>
+              <Text style={styles.serviceDesc} numberOfLines={2}>{service.description}</Text>
+              <Text style={styles.servicePrice}>{formatPkr(service.price)}</Text>
             </View>
           </Pressable>
         ))}
       </ScrollView>
-
-      {/* â”€â”€ Bottom Tab placeholder line â”€â”€ */}
     </SafeAreaView>
   );
 }
@@ -967,9 +945,15 @@ const styles = StyleSheet.create({
   content: {paddingBottom: 36},
 
   menuOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    elevation: 100,
     flex: 1,
     backgroundColor: 'rgba(11,28,48,0.28)',
     alignItems: 'flex-start',
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
   menuPanel: {
     width: 304,
@@ -1098,6 +1082,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 8,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   menuBtn: {
     width: 38,
@@ -1373,8 +1359,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   bannerLeft: {
-    flex: 1, 
-    paddingRight: 96
+    width: '58%',
+    zIndex: 1,
   },
   flashBadge: {
     alignSelf: 'flex-start',
@@ -1417,17 +1403,25 @@ const styles = StyleSheet.create({
   },
   bannerImageBox: {
     position: 'absolute',
-    right: 14,
-    top: 14,
-    bottom: 14,
-    width: 88,
-    borderRadius: rounded.lg,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '46%',
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
     overflow: 'hidden',
+  },
+  bannerImageCurve: {
+    position: 'absolute',
+    right: '38%',
+    top: -32,
+    bottom: -32,
+    width: 84,
+    borderTopRightRadius: 84,
+    borderBottomRightRadius: 84,
+    zIndex: 1,
+    backgroundColor: '#006C49',
   },
   bannerImage: {
     width: '100%',
@@ -1476,8 +1470,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 10,
+    marginTop: 16,
+    marginBottom: 14,
   },
   sectionTitle: {
     fontFamily: fontFamily.extraBold,
@@ -1553,6 +1547,50 @@ const styles = StyleSheet.create({
     paddingRight: 24,
     marginBottom: 8,
   },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    rowGap: 8,
+    marginBottom: 20,
+  },
+  categoryCard: {
+    minHeight: 78,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EDF0F5',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 7,
+    paddingHorizontal: 3,
+  },
+  categoryCardPressed: {
+    opacity: 0.82,
+    transform: [{scale: 0.96}],
+  },
+  categoryImageFrame: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  categoryImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 11,
+  },
+  categoryIconFallback: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chip: {
     alignItems: 'center',
     gap: 6,
@@ -1565,15 +1603,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  chipImage: {width: '100%', height: '100%', borderRadius: rounded.full},
   chipLabel: {
-    fontFamily: fontFamily.bold,
-    fontWeight: '800',
-    fontSize: 12.5,
-    color: '#0b1c30',
+    marginTop: 5,
+    paddingHorizontal: 1,
+    fontFamily: fontFamily.extraBold,
+    fontWeight: '900',
+    fontSize: 10,
+    lineHeight: 12,
+    color: '#172033',
     textAlign: 'center',
   },
 
+  quickSection: {marginTop: 2, marginBottom: 20},
+  quickHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12},
+  quickTitle: {fontFamily: fontFamily.extraBold, fontWeight: '900', fontSize: 21, color: '#0b1c30'},
+  quickScrollContent: {paddingHorizontal: 16, paddingRight: 30, gap: 12},
+  quickCard: {width: 148, padding: 8, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8ECF2', shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: {width: 0, height: 4}, elevation: 2},
+  quickImageWrap: {height: 88, borderRadius: 12, overflow: 'hidden', backgroundColor: '#EFF8F4', alignItems: 'center', justifyContent: 'center'},
+  quickImage: {width: '100%', height: '100%'},
+  quickCardTitle: {fontFamily: fontFamily.bold, fontSize: 13, lineHeight: 17, color: '#172033', marginTop: 9, minHeight: 34},
+  quickCardMeta: {fontFamily: fontFamily.regular, fontSize: 10, color: '#667085', marginTop: 3},
+
   // Service Cards
+  serviceName: {
+    fontFamily: fontFamily.extraBold,
+    fontSize: 16,
+    color: '#0b1c30',
+  },
+  serviceDesc: {
+    marginTop: 5,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#76777d',
+  },
   serviceCard: {
     backgroundColor: '#ffffff',
     borderRadius: rounded.xl,

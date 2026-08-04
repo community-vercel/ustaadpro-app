@@ -132,6 +132,7 @@ export function ShoppingOrdersScreen({navigation}: Props): React.JSX.Element {
       </View>
 
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -327,6 +328,8 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   backButton: {
     width: 42,

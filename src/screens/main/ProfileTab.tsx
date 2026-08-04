@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Edit2,
   Gift,
+  WalletCards,
   LogOut,
   Mail,
   MapPin,
@@ -42,6 +43,7 @@ import {formatPkr} from '@/utils/currency';
 import {NotificationCenter} from '@/components/NotificationCenter';
 
 const statusCopy: Record<Order['status'], string> = {
+  checking_receipt: 'Checking receipt',
   confirmed: 'Confirmed',
   assigned: 'Assigned',
   in_progress: 'In Progress',
@@ -438,6 +440,7 @@ export function ProfileTab(): React.JSX.Element {
         </View>
 
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -489,40 +492,29 @@ export function ProfileTab(): React.JSX.Element {
           </Pressable>
         </View>
 
-        {appSettings.rewardEnabled !== false ? (
-          <View style={styles.rewardCard}>
-            <View style={styles.rewardIcon}>
-              <Gift color="#006c49" size={21} strokeWidth={2.3} />
+        <View style={styles.walletRewardsRow}>
+          <View style={[styles.accountValueCard, styles.walletValueCard]}>
+            <View style={[styles.accountValueIcon, styles.walletValueIcon]}>
+              <WalletCards color="#087a5c" size={23} strokeWidth={2.25} />
             </View>
-            <View style={styles.rewardCopy}>
-              <View style={styles.rewardHeader}>
-                <Text style={styles.rewardTitle}>Reward points</Text>
-                <Text style={styles.rewardPoints}>
-                  {formatPkr(rewardBalanceValue)}
-                </Text>
-              </View>
-              <Text style={styles.rewardText}>
-                {rewardPoints} point(s). Earn{' '}
-                {appSettings.serviceRewardPointsOnCompletion || 1} point after
-                each completed service booking.
-              </Text>
-              <View style={styles.rewardProgressTrack}>
-                <View
-                  style={[
-                    styles.rewardProgressFill,
-                    {width: `${rewardProgress}%`},
-                  ]}
-                />
-              </View>
-              <Text style={styles.rewardHint}>
-                {pointsNeeded === 0
-                  ? 'You can redeem rewards on eligible bookings.'
-                  : `${pointsNeeded} more point(s) to unlock reward redemption.`}
-              </Text>
-            </View>
+            <Text style={styles.accountValueTitle}>UstaadPro Wallet</Text>
+            <Text style={[styles.accountValueAmount, styles.walletAmount]}>{formatPkr(Number(user?.walletBalance || 0))}</Text>
+            <Text style={styles.accountValueBody}>Verified cancelled-service refunds are added here and can be used for future bookings.</Text>
           </View>
-        ) : null}
 
+          {appSettings.rewardEnabled !== false ? (
+            <View style={[styles.accountValueCard, styles.pointsValueCard]}>
+              <View style={[styles.accountValueIcon, styles.pointsValueIcon]}>
+                <Gift color="#6545d8" size={23} strokeWidth={2.25} />
+              </View>
+              <Text style={styles.accountValueTitle}>Reward Points</Text>
+              <Text style={[styles.accountValueAmount, styles.pointsAmount]}>{rewardPoints} Pts</Text>
+              <Text style={styles.accountValueBody}>Earn {appSettings.serviceRewardPointsOnCompletion || 1} point after each completed service booking.</Text>
+              <View style={styles.pointsProgressTrack}><View style={[styles.pointsProgressFill, {width: `${rewardProgress}%`}]} /></View>
+              <Text style={styles.pointsAvailable}>{rewardPoints} points available</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.addressCard}>
           <View style={styles.addressHeader}>
             <View>
@@ -680,6 +672,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     gap: 10,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   headerLeft: {
     flex: 1,
@@ -951,70 +945,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.ink,
   },
-  rewardCard: {
+  walletRewardsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  accountValueCard: {
+    flex: 1,
+    minHeight: 190,
     backgroundColor: '#ffffff',
     borderRadius: rounded.xl,
     borderWidth: 1,
-    borderColor: '#d7e4ef',
-    padding: 16,
-    marginTop: 14,
-    flexDirection: 'row',
-    gap: 12,
+    borderColor: '#e5eaf2',
+    padding: 14,
+    overflow: 'hidden',
   },
-  rewardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: rounded.default,
-    backgroundColor: '#ecfdf5',
+  walletValueCard: {backgroundColor: '#ffffff'},
+  pointsValueCard: {backgroundColor: '#ffffff'},
+  accountValueIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 9,
   },
-  rewardCopy: {
-    flex: 1,
-  },
-  rewardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  rewardTitle: {
+  walletValueIcon: {backgroundColor: '#dff8ea'},
+  pointsValueIcon: {backgroundColor: '#eee8ff'},
+  accountValueTitle: {
     fontFamily: fontFamily.bold,
     color: colors.ink,
-    fontSize: 15,
-  },
-  rewardPoints: {
-    fontFamily: fontFamily.extraBold,
-    color: '#006c49',
-    fontSize: 20,
-  },
-  rewardText: {
-    fontFamily: fontFamily.regular,
-    color: colors.text,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 17,
+  },
+  accountValueAmount: {
+    fontFamily: fontFamily.extraBold,
+    fontSize: 20,
     marginTop: 3,
   },
-  rewardProgressTrack: {
-    height: 8,
+  walletAmount: {color: '#087a5c'},
+  pointsAmount: {color: '#6545d8'},
+  accountValueBody: {
+    fontFamily: fontFamily.regular,
+    color: '#566274',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 10,
+    paddingRight: 4,
+  },
+  pointsProgressTrack: {
+    height: 6,
+    backgroundColor: '#e6e2f4',
     borderRadius: rounded.full,
-    backgroundColor: '#e5eeff',
     overflow: 'hidden',
     marginTop: 10,
   },
-  rewardProgressFill: {
-    height: '100%',
-    borderRadius: rounded.full,
-    backgroundColor: '#006c49',
-  },
-  rewardHint: {
+  pointsProgressFill: {height: '100%', borderRadius: rounded.full, backgroundColor: '#6545d8'},
+  pointsAvailable: {
     fontFamily: fontFamily.bold,
-    color: '#006c49',
-    fontSize: 12,
-    lineHeight: 17,
+    color: '#6545d8',
+    fontSize: 10,
     marginTop: 8,
-  },
-  addressCard: {
+  },  addressCard: {
     backgroundColor: '#ffffff',
     borderRadius: rounded.xl,
     borderWidth: 1,

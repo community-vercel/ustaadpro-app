@@ -7,6 +7,7 @@ import {
   HomeSlide,
   Order,
   ServiceCategory,
+  ServiceSubcategory,
   ServiceItem,
   ShopCartItem,
   ShopOrder,
@@ -23,7 +24,37 @@ const AUTH_SESSION_KEY = 'auth_session';
 const GUEST_SESSION_KEY = 'guest_session';
 const SERVICE_LOCATION_KEY = 'saved_service_location';
 const SHOP_LOCATION_KEY = 'saved_shop_location';
+const PENDING_PAYMENT_ORDER_ID_KEY = 'pending_service_payment_order_id';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+
+const LEGACY_CATEGORY_ALIASES: Record<string, {id: string; title: string} | null> = {
+  'ac-services': {id: 'hvac', title: 'HVAC'},
+  hvac: {id: 'hvac', title: 'HVAC'},
+  cleaning: {id: 'home-services', title: 'Home Services'},
+  'cleaning-service': {id: 'home-services', title: 'Home Services'},
+  'home-cleaning': {id: 'home-services', title: 'Home Services'},
+  'dry-cleaning': {id: 'home-services', title: 'Home Services'},
+  'home-service': {id: 'home-services', title: 'Home Services'},
+  'home-services': {id: 'home-services', title: 'Home Services'},
+  painter: {id: 'painter', title: 'Painter'},
+  painters: {id: 'painter', title: 'Painter'},
+  plumber: {id: 'plumber', title: 'Plumber'},
+  plumbers: {id: 'plumber', title: 'Plumber'},
+  welder: {id: 'welder', title: 'Welder'},
+  'welder-fabricator': {id: 'welder', title: 'Welder'},
+  subscriptions: null,
+};
+
+function canonicalCategory(id?: string, title?: string) {
+  const key = String(id || title || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return LEGACY_CATEGORY_ALIASES[key] === undefined
+    ? {id: id || key, title: title || id || 'Services'}
+    : LEGACY_CATEGORY_ALIASES[key];
+}
 
 type StoredAuthSession = {
   user: User;
@@ -82,6 +113,7 @@ interface AppState {
   savedServiceLocation: SavedLocation | null;
   savedShopLocation: SavedLocation | null;
   categories: ServiceCategory[];
+  subcategories: ServiceSubcategory[];
   services: ServiceItem[];
   shopProducts: ShopProduct[];
   shopCategories: Array<{name: string; total: number}>;
@@ -132,7 +164,7 @@ interface AppState {
   fetchServices: () => Promise<void>;
   fetchAppContent: () => Promise<void>;
   fetchOrders: () => Promise<void>;
-  fetchShopProducts: (options?: {reset?: boolean; category?: string}) => Promise<void>;
+  fetchShopProducts: (options?: {reset?: boolean; category?: string; search?: string}) => Promise<void>;
   fetchShopOrders: () => Promise<void>;
   fetchServiceReviews: (serviceId: string) => Promise<ServiceReview[]>;
   submitServiceReview: (payload: {
@@ -164,7 +196,7 @@ interface AppState {
   addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'> & Partial<Pick<AppNotification, 'id' | 'createdAt'>>) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
-  setPendingPaymentOrderId: (orderId: string | null) => void;
+  setPendingPaymentOrderId: (orderId: string | null) => Promise<void>;
   requestOpenShopCart: () => void;
   setLocationPromptVisible: (visible: boolean) => void;
   addAddress: (payload: {
@@ -183,8 +215,8 @@ interface AppState {
   setSavedShopLocation: (location: SavedLocation | null) => Promise<void>;
 
   addToCart: (service: ServiceItem) => void;
-  removeFromCart: (serviceId: string) => void;
-  updateCartQuantity: (serviceId: string, quantity: number) => void;
+  removeFromCart: (serviceId: string, serviceWorkPriceId?: number) => void;
+  updateCartQuantity: (serviceId: string, quantity: number, serviceWorkPriceId?: number) => void;
   clearCart: () => void;
   checkout: (checkoutDetails: any) => Promise<Order>;
   addShopProductToCart: (product: ShopProduct) => void;
@@ -211,6 +243,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   savedServiceLocation: null,
   savedShopLocation: null,
   categories: [],
+  subcategories: [],
   services: [],
   shopProducts: [],
   shopCategories: [],
@@ -225,6 +258,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   appSettings: {
     inspectionFee: 500,
     serviceTaxPercent: 12,
+    minimumBookingLeadHours: 4,
     currency: 'PKR',
     supportPhone: '+923001234567',
     shippingCost: 200,
@@ -246,6 +280,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         guestSession,
         rawServiceLocation,
         rawShopLocation,
+        pendingPaymentOrderId,
       ] = await Promise.all([
         AsyncStorage.getItem('onboarding_complete'),
         AsyncStorage.getItem(AUTH_TOKEN_KEY),
@@ -253,6 +288,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         AsyncStorage.getItem(GUEST_SESSION_KEY),
         AsyncStorage.getItem(SERVICE_LOCATION_KEY),
         AsyncStorage.getItem(SHOP_LOCATION_KEY),
+        AsyncStorage.getItem(PENDING_PAYMENT_ORDER_ID_KEY),
       ]);
 
       const nextState: Partial<AppState> = {
@@ -262,6 +298,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? JSON.parse(rawServiceLocation)
           : null,
         savedShopLocation: rawShopLocation ? JSON.parse(rawShopLocation) : null,
+        pendingPaymentOrderId,
       };
 
       if (token && rawSession) {
@@ -351,7 +388,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  setPendingPaymentOrderId: orderId => set({pendingPaymentOrderId: orderId}),
+  setPendingPaymentOrderId: async orderId => {
+    set({pendingPaymentOrderId: orderId});
+    if (orderId) {
+      await AsyncStorage.setItem(PENDING_PAYMENT_ORDER_ID_KEY, orderId);
+    } else {
+      await AsyncStorage.removeItem(PENDING_PAYMENT_ORDER_ID_KEY);
+    }
+  },
   requestOpenShopCart: () => set({shopCartOpenRequestId: Date.now()}),
   setLocationPromptVisible: visible => set({locationPromptVisible: visible}),
 
@@ -516,57 +560,57 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchServices: async () => {
     try {
-      // In the real backend we may only have /services which returns everything or we can fetch categories
-      // If we don't have a /categories route, we can derive them, or assume they are returned
-      // The current backend mock seeds categories, so let's try to get them. If no endpoint exists, we'll map them from services.
-      // Wait, let's just fetch services for now, and derive categories if needed.
-      // Actually, the backend `routes/services.js` has `/` and `/:id`.
-      const response = await apiClient.get('/services');
-      const data = response.data;
-      const categoryResponse = await apiClient
-        .get('/categories')
-        .catch(() => null);
-
-      const derivedCategories: ServiceCategory[] = categoryResponse?.data
-        ?.length
-        ? categoryResponse.data
-        : Array.from(new Set(data.map((s: any) => s.category_id))).map(id => ({
-            id: id as any,
-            title: String(id).charAt(0).toUpperCase() + String(id).slice(1),
-            subtitle: 'Explore services',
-            icon: 'tool',
-            tint: '#4F46E5',
-          }));
-
-      // Map backend fields back to frontend camelCase
-      const formattedServices: ServiceItem[] = data.map((s: any) => ({
-        ...s,
-        categoryId: s.category_id || s.categoryId,
-        subcategoryId: s.subcategory_id || s.subcategoryId,
-        serviceType: s.service_type || s.serviceType,
-        imageUrl: resolveApiAssetUrl(s.image_url || s.imageUrl || ''),
-        detailDescription:
-          s.detail_description || s.detailDescription || s.description,
-        details: s.details || [],
-        workPrices: (s.workPrices || s.work_prices || []).map((work: any) => ({
-          ...work,
-          imageUrl: resolveApiAssetUrl(work.imageUrl || work.image_url || ''),
-          price: Number(work.price || 0),
-        })),
-        originalPrice: Number(s.original_price ?? s.originalPrice ?? 0),
-        price: Number(s.price),
+      const response = await apiClient.get('/catalog');
+      const catalog = Array.isArray(response.data) ? response.data : [];
+      const categories: ServiceCategory[] = catalog.map((category: any) => ({
+        id: category.id,
+        title: category.title,
+        subtitle: category.subtitle || 'Explore services',
+        icon: category.icon || 'tool',
+        tint: category.tint || '#006C49',
+        imageUrl: resolveApiAssetUrl(category.imageUrl || category.image_url || category.mainCategory?.mobileIconUrl || ''),
+        webImageUrl: resolveApiAssetUrl(category.mainCategory?.webImageUrl || category.webImageUrl || category.web_image_url || category.imageUrl || category.image_url || ''),
+        mobileIconUrl: resolveApiAssetUrl(category.mainCategory?.mobileIconUrl || category.mobileIconUrl || category.mobile_icon_url || category.imageUrl || category.image_url || ''),
       }));
-
-      const filteredCategories = derivedCategories.filter(
-        c => !['subscriptions', 'salon'].includes(c.id),
+      const subcategories: ServiceSubcategory[] = catalog.flatMap((category: any) =>
+        (category.subcategories || []).map((item: any) => ({
+          id: item.id,
+          categoryId: canonicalCategory(item.categoryId || item.category_id || category.id, category.title)?.id || category.id,
+          title: (item.subCategory || item).title,
+          description: item.description || '',
+          imageUrl: resolveApiAssetUrl(item.imageUrl || item.image_url || ''),
+          webImageUrl: resolveApiAssetUrl(item.webImageUrl || item.web_image_url || item.imageUrl || item.image_url || ''),
+          mobileIconUrl: resolveApiAssetUrl(item.mobileIconUrl || item.mobile_icon_url || item.imageUrl || item.image_url || ''),
+        })),
       );
-
-      set({services: formattedServices, categories: filteredCategories});
+      const rawServices = catalog.flatMap((category: any) => [
+        ...(category.directServices || category.services || []),
+        ...(category.subcategories || []).flatMap((item: any) => item.services || []),
+      ]);
+      const services: ServiceItem[] = rawServices.map((s: any) => ({
+        ...s,
+        categoryId: canonicalCategory(s.categoryId || s.category_id)?.id || s.categoryId || s.category_id,
+        subcategoryId: s.subcategoryId || s.subcategory_id || undefined,
+        serviceType: s.unitDescription || s.serviceType || s.service_type,
+        imageUrl: resolveApiAssetUrl(s.imageUrl || s.image_url || ''),
+        detailDescription: s.detailDescription || s.detail_description || s.description,
+        details: s.details || [],
+        workPrices: (s.workPrices || s.work_prices || []).map((work: any) => ({...work, imageUrl: resolveApiAssetUrl(work.imageUrl || work.image_url || ''), price: Number(work.price || 0)})),
+        originalPrice: Number(s.originalPrice ?? s.original_price ?? 0),
+        price: Number(s.price || 0),
+      }));
+      // Deduplicate by id in case stale DB rows slip through
+      const seenCats = new Set<string>();
+      const uniqueCategories = categories.filter(c => { if (seenCats.has(c.id)) return false; seenCats.add(c.id); return true; });
+      const seenSubs = new Set<string>();
+      const uniqueSubcategories = subcategories.filter(s => { if (seenSubs.has(s.id)) return false; seenSubs.add(s.id); return true; });
+      const seenSvcs = new Set<string>();
+      const uniqueServices = services.filter(s => { if (seenSvcs.has(s.id)) return false; seenSvcs.add(s.id); return true; });
+      set({categories: uniqueCategories, subcategories: uniqueSubcategories, services: uniqueServices});
     } catch (error) {
       console.error('Fetch services error:', error);
     }
   },
-
   fetchAppContent: async () => {
     try {
       const [slidesResponse, settingsResponse] = await Promise.all([
@@ -583,6 +627,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           inspectionFee: Number(settingsResponse.data.inspectionFee || 0),
           serviceTaxPercent: Number(
             settingsResponse.data.serviceTaxPercent || 0,
+          ),
+          minimumBookingLeadHours: Math.max(
+            0,
+            Math.min(168, Number(settingsResponse.data.minimumBookingLeadHours ?? settingsResponse.data.minimum_booking_lead_hours ?? 4) || 0),
           ),
           currency: settingsResponse.data.currency || 'PKR',
           supportPhone:
@@ -654,7 +702,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchShopProducts: async (options = {}) => {
     const pageSize = 15;
-    const {reset = false, category = 'All'} = options;
+    const {reset = false, category = 'All', search = ''} = options;
     const state = get();
 
     if (!reset && (state.shopProductsLoadingMore || !state.shopProductsHasMore)) {
@@ -670,7 +718,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const offset = reset ? 0 : get().shopProducts.length;
       const response = await apiClient.get('/shop/products', {
-        params: {limit: pageSize, offset, category},
+        params: {limit: pageSize, offset, category, ...(search ? {search} : {})},
       });
       const payload = response.data;
       const rawProducts = Array.isArray(payload)
@@ -758,21 +806,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   cancelServiceOrder: async (orderId, cancelReason) => {
-    const response = await apiClient.patch(`/orders/${orderId}/cancel`, {
-      cancelReason,
-    });
-    set(state => ({
-      orders: state.orders.map(order =>
-        order.id === orderId
-          ? {
-              ...order,
-              status: response.data.status || 'cancelled',
-              cancelReason: response.data.cancelReason || cancelReason,
-            }
-          : order,
-      ),
-    }));
-    await refreshProfileState(set);
+    await apiClient.patch('/orders/' + orderId + '/cancel', {cancelReason});
+    // The cancel endpoint returns an acknowledgement, not a complete Order.
+    // Reload the populated order to keep Bookings rendering safely.
+    await get().fetchOrders();
   },
 
   uploadPaymentReceipt: async payload => {
@@ -871,23 +908,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {cart: [...state.cart, {service, quantity: 1}]};
     }),
 
-  removeFromCart: serviceId =>
+  removeFromCart: (serviceId, serviceWorkPriceId) =>
     set(state => ({
-      cart: state.cart.filter(item => item.service.id !== serviceId),
+      cart: state.cart.filter(item => {
+        const itemWorkId = item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id;
+        return item.service.id !== serviceId || itemWorkId !== serviceWorkPriceId;
+      }),
     })),
 
-  updateCartQuantity: (serviceId, quantity) =>
+  updateCartQuantity: (serviceId, quantity, serviceWorkPriceId) =>
     set(state => {
-      if (quantity <= 0) {
-        return {cart: state.cart.filter(item => item.service.id !== serviceId)};
-      }
-      return {
-        cart: state.cart.map(item =>
-          item.service.id === serviceId ? {...item, quantity} : item,
-        ),
+      const safeQuantity = Math.min(20, Math.max(0, Math.floor(Number(quantity) || 0)));
+      const isTarget = (item: CartItem) => {
+        const itemWorkId = item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id;
+        return item.service.id === serviceId && itemWorkId === serviceWorkPriceId;
       };
+      if (safeQuantity <= 0) return {cart: state.cart.filter(item => !isTarget(item))};
+      return {cart: state.cart.map(item => isTarget(item) ? {...item, quantity: safeQuantity} : item)};
     }),
-
   clearCart: () => set({cart: []}),
 
   addShopProductToCart: product =>

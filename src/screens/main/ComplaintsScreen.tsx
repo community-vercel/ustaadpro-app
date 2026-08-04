@@ -196,7 +196,7 @@ export function ComplaintsScreen() {
 
       {viewMode === 'list' ? (
         <View style={{ flex: 1 }}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
+          <ScrollView style={{flex: 1}} contentContainerStyle={styles.scrollContent}>
             {complaints.length === 0 ? (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
                 <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#eff4ff', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
@@ -241,7 +241,7 @@ export function ComplaintsScreen() {
           style={{ flex: 1 }} 
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{flex: 1}} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             
             <Text style={styles.sectionDesc}>
               We're sorry you had an issue. Please let us know the details so we can fix it.
@@ -399,6 +399,8 @@ const styles = StyleSheet.create({
     height: 56,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontFamily: fontFamily.bold, color: '#1d1e20' },

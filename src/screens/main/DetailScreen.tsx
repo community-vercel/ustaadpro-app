@@ -46,10 +46,11 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
     fetchServices,
     fetchServiceReviews,
     user,
+    addToCart,
   } = useAppStore();
   const service = services.find(item => item.id === route.params.serviceId);
-  const [selectedWorkId, setSelectedWorkId] = useState<number | null>(
-    route.params.selectedWorkId ?? null
+  const [selectedWorkIds, setSelectedWorkIds] = useState<number[]>(
+    route.params.selectedWorkId !== undefined ? [route.params.selectedWorkId] : [0]
   );
   const [issueDescription, setIssueDescription] = useState('');
   const [issuePhotos, setIssuePhotos] = useState<Asset[]>([]);
@@ -110,8 +111,7 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
           price: service.price,
         },
       ];
-  const selectedWorkItem =
-    specificWorks.find(work => work.id === selectedWorkId) || specificWorks[0];
+  const selectedWorkItems = specificWorks.filter(work => selectedWorkIds.includes(work.id));
 
   const serviceDetails = service.details?.length ? service.details : [];
   const visibleReviews = reviews.slice(0, 2);
@@ -385,6 +385,7 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
       </View>
 
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
@@ -425,44 +426,54 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
         <View style={styles.divider} />
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Specific Work</Text>
-          {specificWorks.map(work => (
-            <Pressable
-              key={work.id}
-              style={[
-                styles.radioCard,
-                selectedWorkItem?.id === work.id && styles.radioCardActive,
-              ]}
-              onPress={() => setSelectedWorkId(work.id)}
-            >
-              <View
+          {specificWorks.map(work => {
+            const isSelected = selectedWorkIds.includes(work.id);
+            return (
+              <Pressable
+                key={work.id}
                 style={[
-                  styles.radioCircle,
-                  selectedWorkItem?.id === work.id && styles.radioCircleActive,
+                  styles.radioCard,
+                  isSelected && styles.radioCardActive,
                 ]}
+                onPress={() => {
+                  setSelectedWorkIds(prev => {
+                    if (prev.includes(work.id)) {
+                      return prev.length > 1 ? prev.filter(id => id !== work.id) : prev;
+                    }
+                    return [...prev, work.id];
+                  });
+                }}
               >
-                {selectedWorkItem?.id === work.id && <View style={styles.radioInner} />}
-              </View>
-              {work.imageUrl ? (
-                <Image
-                  source={{uri: work.imageUrl}}
-                  style={styles.radioImage}
-                  resizeMode="cover"
-                />
-              ) : null}
-              <View style={styles.radioContent}>
-                <Text
+                <View
                   style={[
-                    styles.radioTitle,
-                    selectedWorkItem?.id === work.id && styles.radioTitleActive,
+                    styles.radioCircle,
+                    isSelected && styles.radioCircleActive,
                   ]}
                 >
-                  {work.title}
-                </Text>
-                <Text style={styles.radioSubtitle}>{work.subtitle}</Text>
-                <Text style={styles.radioPrice}>{formatPkr(work.price)}</Text>
-              </View>
-            </Pressable>
-          ))}
+                  {isSelected && <Check color="#ffffff" size={12} strokeWidth={3} />}
+                </View>
+                {work.imageUrl ? (
+                  <Image
+                    source={{uri: work.imageUrl}}
+                    style={styles.radioImage}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                <View style={styles.radioContent}>
+                  <Text
+                    style={[
+                      styles.radioTitle,
+                      isSelected && styles.radioTitleActive,
+                    ]}
+                  >
+                    {work.title}
+                  </Text>
+                  <Text style={styles.radioSubtitle}>{work.subtitle}</Text>
+                  <Text style={styles.radioPrice}>{formatPkr(work.price)}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={styles.divider} />
@@ -587,17 +598,18 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
         <Pressable
           style={styles.addCartBtn}
           onPress={() => {
-            if (!user) {
-              promptLogin();
-              return;
-            }
-
-            navigation.navigate('Booking', {
-              serviceId: service.id,
-              specificWorkPriceId: selectedWorkItem?.workPriceId,
-              specificWorkTitle: selectedWorkItem?.title || service.title,
-              specificWorkPrice: selectedWorkItem?.price || service.price,
+            const worksToAdd = selectedWorkItems.length ? selectedWorkItems : specificWorks.slice(0, 1);
+            worksToAdd.forEach(work => {
+              const selectedWorkPrice = (service.workPrices || []).find(item => item.id === work.workPriceId);
+              addToCart({
+                ...service,
+                price: Number(work.price || service.price),
+                selectedWorkPrice,
+                selectedWorkPriceId: work.workPriceId,
+                selectedWorkTitle: work.title || service.title,
+              });
             });
+            navigation.navigate('Cart');
           }}
         >
           <Text style={styles.addCartText}>Add to cart</Text>
@@ -793,6 +805,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     height: 56,
+    backgroundColor: '#f8fafc',
+    zIndex: 10,
   },
   iconBtn: {
     width: 40,
@@ -916,14 +930,17 @@ const styles = StyleSheet.create({
   radioCircle: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: '#c6c6cd',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
   },
-  radioCircleActive: {borderColor: '#006c49'},
+  radioCircleActive: {
+    borderColor: '#006c49',
+    backgroundColor: '#006c49',
+  },
   radioInner: {
     width: 10,
     height: 10,

@@ -1,4 +1,4 @@
-﻿import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -39,6 +39,7 @@ import {rounded} from '@/theme/layout';
 import {formatPkr} from '@/utils/currency';
 import {NotificationCenter} from '@/components/NotificationCenter';
 import {resolveApiAssetUrl} from '@/api/client';
+import {playConfirmationCue} from '@/utils/confirmationCue';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -46,6 +47,7 @@ const statusMeta: Record<
   Order['status'],
   {label: string; bg: string; color: string}
 > = {
+  checking_receipt: {label: 'Checking receipt', bg: '#fff7df', color: '#a16207'},
   confirmed: {label: 'Confirmed', bg: '#dcfce7', color: '#006c49'},
   assigned: {label: 'Assigned', bg: '#e5eeff', color: '#0b1c30'},
   in_progress: {label: 'In Progress', bg: '#fef3c7', color: '#92400e'},
@@ -143,6 +145,8 @@ export function BookingsTab(): React.JSX.Element {
   const uploadPaymentReceipt = useAppStore(state => state.uploadPaymentReceipt);
   const pendingPaymentOrderId = useAppStore(state => state.pendingPaymentOrderId);
   const setPendingPaymentOrderId = useAppStore(state => state.setPendingPaymentOrderId);
+  const addNotification = useAppStore(state => state.addNotification);
+  const notifications = useAppStore(state => state.notifications);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{
@@ -165,7 +169,17 @@ export function BookingsTab(): React.JSX.Element {
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [submittingCancel, setSubmittingCancel] = useState(false);
+  const [cancelToastVisible, setCancelToastVisible] = useState(false);
+  const cancelToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<Order | null>(null);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentSuccessVisible, setPaymentSuccessVisible] = useState(false);
+  const [paymentSuccessWasRemaining, setPaymentSuccessWasRemaining] = useState(false);
+  const [paymentDeferredThisSession, setPaymentDeferredThisSession] = useState(false);
+  const paymentDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const seenNotificationIds = useRef<Set<string> | null>(null);
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const existingReceiptUrl = paymentTarget?.paymentReceipt?.receiptUrl
@@ -173,6 +187,9 @@ export function BookingsTab(): React.JSX.Element {
     : '';
   const visibleReceiptUrl = receiptPreview || existingReceiptUrl;
   const hasUploadedReceipt = Boolean(visibleReceiptUrl);
+  const isRemainingBalancePayment =
+    paymentTarget?.paymentMethod === 'Rs 200 Advance' &&
+    paymentTarget?.status === 'completed';
   const bookingDays = useMemo(() => getBookingDays(), []);
   const editStartDay = bookingDays[editSelectedDay] || bookingDays[0];
   const editEndDay =
@@ -320,6 +337,10 @@ export function BookingsTab(): React.JSX.Element {
       await cancelServiceOrder(cancelTarget.id, reason);
       setCancelTarget(null);
       setCancelReason('');
+      setFilter('done');
+      if (cancelToastTimer.current) clearTimeout(cancelToastTimer.current);
+      setCancelToastVisible(true);
+      cancelToastTimer.current = setTimeout(() => setCancelToastVisible(false), 3000);
     } catch (error: any) {
       Alert.alert(
         'Cancel failed',
@@ -332,29 +353,49 @@ export function BookingsTab(): React.JSX.Element {
 
   const openPaymentModal = (order?: Order | null) => {
     if (!order) return;
+    if (paymentDismissTimer.current) {
+      clearTimeout(paymentDismissTimer.current);
+      paymentDismissTimer.current = null;
+    }
     setPaymentTarget(order);
     setReceiptPreview(null);
+    setPaymentModalVisible(true);
   };
 
-  
-  const closePaymentModal = () => {
-    if (submittingReceipt) {
-      return;
-    }
+  const closePaymentModal = (force = false) => {
+    if (submittingReceipt && !force) return;
+    setPaymentDeferredThisSession(true);
+    setPaymentModalVisible(false);
     setPaymentTarget(null);
     setReceiptPreview(null);
   };
+  useEffect(
+    () => () => {
+      if (paymentDismissTimer.current) {
+        clearTimeout(paymentDismissTimer.current);
+      }
+    },
+    [],
+  );
 
-const openPaymentByOrderId = (orderId?: string) => {
+  const openPaymentByOrderId = (orderId?: string) => {
     const order = orderId
       ? orders.find(item => item.id === orderId)
       : orders.find(item => item.status === 'completed');
     openPaymentModal(order || null);
   };
-
   const isCashPayment = (method?: string | null) =>
     String(method || '').toLowerCase().includes('cash');
-
+  const paymentAmountDue = paymentTarget
+    ? paymentTarget.paymentMethod === 'Rs 200 Advance'
+      ? paymentTarget.status === 'completed'
+        ? Math.max(0, Number(paymentTarget.total || 0) - Number(paymentTarget.paymentReceipt?.amount || 0))
+        : Math.min(200, Number(paymentTarget.total || 0))
+      : Number(paymentTarget.total || 0)
+    : 0;
+  const remainingAfterPayment = paymentTarget
+    ? Math.max(0, Number(paymentTarget.total || 0) - paymentAmountDue)
+    : 0;
   const copyPaymentNumber = () => {
     Clipboard.setString(EASYPAISA_ACCOUNT_NUMBER);
     Alert.alert('Copied', 'EasyPaisa account number copied successfully.');
@@ -382,12 +423,27 @@ const openPaymentByOrderId = (orderId?: string) => {
         orderId: paymentTarget.id,
         dataUrl,
         filename: asset.fileName || 'payment-receipt.jpg',
-        amount: paymentTarget.total,
+        amount: paymentAmountDue,
       });
       setReceiptPreview(asset.uri || null);
       await fetchOrders();
-      Alert.alert('Receipt uploaded', 'Thank you. Your EasyPaisa receipt has been submitted.');
-    } catch (error: any) {
+      await setPendingPaymentOrderId(null);
+      const remainingPaymentJustCompleted = isRemainingBalancePayment;
+      setPaymentSuccessWasRemaining(remainingPaymentJustCompleted);
+      closePaymentModal(true);
+      await addNotification({
+        title: remainingPaymentJustCompleted ? 'Payment complete — thank you!' : 'Payment receipt submitted',
+        body: remainingPaymentJustCompleted ? 'Thank you for using UstaadPro. Please rate your completed service.' : 'Your payment proof was received successfully. We will verify it and keep you updated about your booking.',
+        orderId: paymentTarget.id,
+        status: paymentTarget.status,
+      });
+      playConfirmationCue();
+      setPaymentSuccessVisible(true);
+      setTimeout(() => {
+        setPaymentSuccessVisible(false);
+        setPaymentModalVisible(false);
+        setPaymentTarget(null);
+      }, 3000);    } catch (error: any) {
       Alert.alert(
         'Upload failed',
         error.response?.data?.message || error.message || 'Please try again.',
@@ -397,16 +453,30 @@ const openPaymentByOrderId = (orderId?: string) => {
     }
   };
   useEffect(() => {
-    if (!pendingPaymentOrderId || paymentTarget) {
+    if (!pendingPaymentOrderId || paymentTarget || paymentDeferredThisSession) {
       return;
     }
 
     const order = orders.find(item => item.id === pendingPaymentOrderId);
-    if (order?.status === 'completed') {
+    if (order && order.status !== 'cancelled') {
       openPaymentModal(order);
-      setPendingPaymentOrderId(null);
     }
-  }, [orders, paymentTarget, pendingPaymentOrderId, setPendingPaymentOrderId]);
+  }, [orders, paymentDeferredThisSession, paymentTarget, pendingPaymentOrderId]);
+  useEffect(() => {
+    if (!seenNotificationIds.current) {
+      seenNotificationIds.current = new Set(notifications.map(item => item.id));
+      return;
+    }
+    const latest = notifications[0];
+    if (!latest || seenNotificationIds.current.has(latest.id)) return;
+    seenNotificationIds.current.add(latest.id);
+    if (latest.status !== 'completed' || !latest.orderId) return;
+    const order = orders.find(item => item.id === latest.orderId);
+    if (order?.paymentMethod === 'Rs 200 Advance' && order.status === 'completed') {
+      setPaymentDeferredThisSession(false);
+      openPaymentModal(order);
+    }
+  }, [notifications, orders]);
   const handleSubmitReview = async () => {
     if (!reviewTarget) {
       return;
@@ -850,31 +920,20 @@ const openPaymentByOrderId = (orderId?: string) => {
           </View>
         </View>
       </Modal>
-      <Modal
-        visible={Boolean(paymentTarget)}
-        transparent
-        animationType="fade"
-        onRequestClose={closePaymentModal}
-      >
+      {paymentModalVisible ? (
+        <View style={styles.paymentSheetLayer}>
         <View style={styles.reviewOverlay}>
           <View style={styles.reviewModal}>
-            <Pressable
-              style={styles.paymentModalCloseButton}
-              onPress={closePaymentModal}
-              disabled={submittingReceipt}
-            >
-              <X color={colors.ink} size={17} strokeWidth={2.4} />
-            </Pressable>
-            <Text style={styles.paymentSuccessTitle}>Congrats, work completed</Text>
+            <Text style={styles.paymentSuccessTitle}>{paymentTarget?.status === 'completed' ? 'Pay your remaining balance' : 'Complete your booking payment'}</Text>
             <Text style={styles.reviewModalSubtitle}>
               {isCashPayment(paymentTarget?.paymentMethod)
                 ? 'Please pay cash to our agent because you selected Cash on Service.'
-                : 'Please pay your service amount with EasyPaisa after work done.'}
+                : 'Transfer the amount to the EasyPaisa account below, then upload your receipt to confirm the booking.'}
             </Text>
             <View style={styles.paymentInfoBox}>
-              <Text style={styles.paymentInfoLabel}>Amount</Text>
+              <Text style={styles.paymentInfoLabel}>Pay now</Text>
               <Text style={styles.paymentInfoValue}>
-                {formatPkr(paymentTarget?.total || 0)}
+                {formatPkr(paymentAmountDue)}
               </Text>
               <Text style={styles.paymentInfoLabel}>Payment method</Text>
               <Text style={styles.paymentInfoValue}>
@@ -897,50 +956,75 @@ const openPaymentByOrderId = (orderId?: string) => {
                 </>
               ) : null}
             </View>
+            {paymentTarget?.paymentMethod === 'Rs 200 Advance' ? (
+              <Text style={styles.paymentBalanceHint}>
+                Remaining after service: {formatPkr(remainingAfterPayment)}
+              </Text>
+            ) : null}
             {!isCashPayment(paymentTarget?.paymentMethod) && visibleReceiptUrl ? (
               <View style={styles.uploadedReceiptBox}>
-                <Text style={styles.uploadedReceiptLabel}>Uploaded receipt</Text>
+                <Text style={styles.uploadedReceiptLabel}>{isRemainingBalancePayment ? 'Advance receipt already submitted' : 'Uploaded receipt'}</Text>
                 <Image source={{uri: visibleReceiptUrl}} style={styles.receiptPreview} />
-                <Text style={styles.uploadedReceiptHint}>
-                  Receipt already submitted. Use Reupload only if you need to replace it.
-                </Text>
+                <Text style={styles.uploadedReceiptHint}>{isRemainingBalancePayment ? 'Advance payment is recorded. Upload the remaining balance receipt below.' : 'Receipt already submitted. Use Reupload only if you need to replace it.'}</Text>
               </View>
             ) : null}
-            <View style={styles.reviewActions}>
+            {!isCashPayment(paymentTarget?.paymentMethod) ? (
               <Pressable
-                style={styles.reviewCancel}
-                onPress={closePaymentModal}
+                style={[styles.paymentUploadOnlyButton, submittingReceipt && styles.reviewSubmitDisabled]}
+                onPress={handleUploadReceipt}
                 disabled={submittingReceipt}
               >
-                <Text style={styles.reviewCancelText}>Later</Text>
+                <Text style={styles.reviewSubmitText}>
+                  {submittingReceipt ? 'Uploading...' : isRemainingBalancePayment ? 'Upload remaining receipt' : hasUploadedReceipt ? 'Reupload advance receipt' : 'Upload advance receipt'}
+                </Text>
               </Pressable>
-              {!isCashPayment(paymentTarget?.paymentMethod) ? (
-                <Pressable
-                  style={[
-                    styles.reviewSubmit,
-                    submittingReceipt && styles.reviewSubmitDisabled,
-                  ]}
-                  onPress={handleUploadReceipt}
-                  disabled={submittingReceipt}
-                >
-                  <Text style={styles.reviewSubmitText}>
-                    {submittingReceipt
-                      ? 'Uploading...'
-                      : hasUploadedReceipt
-                        ? 'Reupload receipt'
-                        : 'Upload receipt'}
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable style={styles.reviewSubmit} onPress={closePaymentModal}>
-                  <Text style={styles.reviewSubmitText}>Done</Text>
-                </Pressable>
-              )}
+            ) : null}
+          </View>
+        </View>
+        </View>
+      ) : null}
+      {paymentSuccessVisible ? (
+        <View style={styles.paymentSheetLayer}>
+          <View style={styles.paymentSuccessOverlay}>
+            <View style={styles.reviewModal}>
+              <View style={styles.paymentSuccessIcon}><CheckCircle2 color="#ffffff" size={34} strokeWidth={2.8} /></View>
+              <Text style={styles.paymentSuccessTitle}>{paymentSuccessWasRemaining ? 'Thank you for using UstaadPro!' : 'Your order has been placed'}</Text>
+              <Text style={styles.paymentSuccessMessage}>{paymentSuccessWasRemaining ? 'Your remaining payment was submitted. Please rate your completed service.' : 'Your payment receipt was submitted successfully. We will verify it and keep you updated.'}</Text>
+              {paymentSuccessWasRemaining ? <View style={styles.paymentRatingStars}>{[1, 2, 3, 4, 5].map(star => <Star key={star} color="#F59E0B" fill="#F59E0B" size={24} />)}</View> : null}
+              <Text style={styles.paymentSuccessAutoClose}>Returning to your bookings...</Text>
             </View>
           </View>
         </View>
-      </Modal>
+      ) : null}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Home"
+            style={styles.headerBackButton}
+            onPress={() => navigation.navigate('Main', {screen: 'Home'})}
+          >
+            <ArrowLeft color={colors.ink} size={20} strokeWidth={2.3} />
+          </Pressable>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Bookings</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              Orders, service visits, and status updates.
+            </Text>
+          </View>
+        </View>
+        <NotificationCenter onPaymentNotificationPress={openPaymentByOrderId} />
+      </View>
+
+      {cancelToastVisible ? (
+        <View pointerEvents="none" style={styles.cancelToast}>
+          <CheckCircle2 color="#ffffff" size={19} strokeWidth={2.8} />
+          <Text style={styles.cancelToastText}>Booking cancelled successfully</Text>
+        </View>
+      ) : null}
+
       <ScrollView
+        style={{flex: 1}}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -952,25 +1036,6 @@ const openPaymentByOrderId = (orderId?: string) => {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to Home"
-              style={styles.headerBackButton}
-              onPress={() => navigation.navigate('Main', {screen: 'Home'})}
-            >
-              <ArrowLeft color={colors.ink} size={20} strokeWidth={2.3} />
-            </Pressable>
-            <View style={styles.headerCopy}>
-              <Text style={styles.title}>Bookings</Text>
-              <Text style={styles.subtitle} numberOfLines={1}>
-                Orders, service visits, and status updates.
-              </Text>
-            </View>
-          </View>
-          <NotificationCenter onPaymentNotificationPress={openPaymentByOrderId} />
-        </View>
 
         <View style={styles.summaryRow}>
           <Pressable
@@ -1045,8 +1110,9 @@ const openPaymentByOrderId = (orderId?: string) => {
           </View>
         ) : (
           filteredOrders.map(order => {
-            const status = statusMeta[order.status];
-            const serviceCount = order.items.reduce(
+            const status = statusMeta[order.status] || statusMeta.confirmed;
+            const orderItems = Array.isArray(order.items) ? order.items.filter(item => item && item.service) : [];
+            const serviceCount = orderItems.reduce(
               (sum, item) => sum + item.quantity,
               0,
             );
@@ -1073,7 +1139,7 @@ const openPaymentByOrderId = (orderId?: string) => {
                 </View>
 
                 <View style={styles.serviceBox}>
-                  {order.items.map(item => (
+                  {orderItems.map(item => (
                     <View key={item.service.id} style={styles.serviceItemBlock}>
                       <View style={styles.serviceRow}>
                         <Text style={styles.itemText} numberOfLines={1}>
@@ -1137,19 +1203,40 @@ const openPaymentByOrderId = (orderId?: string) => {
                   </View>
                 ) : null}
 
-                {order.status === 'completed' ? (
+                {pendingPaymentOrderId === order.id && !order.paymentReceipt?.receiptUrl ? (
                   <Pressable
                     style={styles.paymentRequestButton}
                     onPress={() => openPaymentModal(order)}
                   >
                     <CreditCard color="#006c49" size={15} strokeWidth={2.2} />
-                    <Text style={styles.paymentRequestText}>
-                      {isCashPayment(order.paymentMethod)
-                        ? 'Pay cash to agent'
-                        : 'Pay with EasyPaisa / upload receipt'}
-                    </Text>
+                    <Text style={styles.paymentRequestText}>Complete EasyPaisa payment</Text>
                   </Pressable>
                 ) : null}
+                {order.paymentReceipt?.receiptUrl ? (
+                  <View style={styles.paymentReceiptSubmitted}>
+                    <CheckCircle2 color="#006c49" size={15} strokeWidth={2.3} />
+                    <Text style={styles.paymentReceiptSubmittedText}>
+                      Payment receipt submitted
+                    </Text>
+                  </View>
+                ) : null}
+                {order.paymentReceipts?.length ? (
+                  <View style={styles.receiptHistory}>
+                    <Text style={styles.receiptHistoryTitle}>Payment receipts</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.receiptHistoryRow}>
+                      {order.paymentReceipts.map(receipt => (
+                        <View key={receipt.id} style={styles.receiptHistoryCard}>
+                          <Image source={{uri: resolveApiAssetUrl(receipt.receiptUrl)}} style={styles.receiptHistoryImage} />
+                          <Text style={styles.receiptHistoryLabel} numberOfLines={1}>
+                            {receipt.paymentStage === 'advance' ? 'Advance receipt' : receipt.paymentStage === 'remaining' ? 'Remaining receipt' : 'Full payment receipt'}
+                          </Text>
+                          <Text style={styles.receiptHistoryMeta}>{formatPkr(receipt.amount)} · {receipt.status}</Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : null}
+
                 {order.status === 'cancelled' && order.cancelReason ? (
                   <View style={styles.cancelReasonBox}>
                     <Text style={styles.cancelReasonLabel}>
@@ -1203,6 +1290,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
+  },
+  paymentSheetLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
+  paymentSuccessOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(11,28,48,0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
   },
   reviewOverlay: {
     flex: 1,
@@ -1455,12 +1553,49 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
   },
-    paymentSuccessTitle: {
+    paymentBalanceHint: {
+    marginTop: 10,
+    fontFamily: fontFamily.medium,
+    color: colors.muted,
+    fontSize: 12,
+  },
+  paymentSuccessIcon: {
+    alignSelf: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#006c49',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentSuccessMessage: {
+    fontFamily: fontFamily.medium,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  paymentRatingStars: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 16,
+  },
+  paymentSuccessAutoClose: {
+    fontFamily: fontFamily.bold,
+    color: '#006c49',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  paymentSuccessTitle: {
     fontFamily: fontFamily.extraBold,
     color: colors.ink,
     fontSize: 20,
     lineHeight: 25,
-    paddingRight: 34,
+    paddingRight: 0,
+    textAlign: 'center',
   },
   paymentModalCloseButton: {
     position: 'absolute',
@@ -1550,6 +1685,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  paymentUploadOnlyButton: {
+    height: 50,
+    marginTop: 20,
+    borderRadius: rounded.default,
+    backgroundColor: colors.authDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   reviewSubmitDisabled: {
     opacity: 0.7,
   },
@@ -1567,8 +1710,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     minHeight: 48,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     gap: 10,
+    backgroundColor: colors.bg,
+    zIndex: 10,
   },
   headerLeft: {
     flex: 1,
@@ -1812,7 +1958,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  paymentRequestButton: {
+  receiptHistory: {
+    marginTop: 12,
+  },
+  receiptHistoryTitle: {
+    fontFamily: fontFamily.bold,
+    color: colors.ink,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  receiptHistoryRow: {
+    gap: 10,
+  },
+  receiptHistoryCard: {
+    width: 122,
+    borderWidth: 1,
+    borderColor: '#d9ebe5',
+    backgroundColor: '#ffffff',
+    borderRadius: rounded.default,
+    overflow: 'hidden',
+    paddingBottom: 8,
+  },
+  receiptHistoryImage: {
+    width: '100%',
+    height: 78,
+    backgroundColor: '#eff4ff',
+  },
+  receiptHistoryLabel: {
+    marginTop: 7,
+    marginHorizontal: 8,
+    fontFamily: fontFamily.bold,
+    color: colors.ink,
+    fontSize: 11,
+  },
+  receiptHistoryMeta: {
+    marginTop: 3,
+    marginHorizontal: 8,
+    fontFamily: fontFamily.regular,
+    color: colors.muted,
+    fontSize: 10,
+  },  paymentReceiptSubmitted: {
+    marginTop: 12,
+    minHeight: 38,
+    borderRadius: rounded.default,
+    backgroundColor: '#effcf6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  paymentReceiptSubmittedText: {
+    fontFamily: fontFamily.bold,
+    color: '#006c49',
+    fontSize: 12,
+  },  paymentRequestButton: {
     marginTop: 12,
     minHeight: 42,
     borderRadius: rounded.default,
@@ -1830,8 +2029,32 @@ const styles = StyleSheet.create({
     color: '#006c49',
     fontSize: 13,
   },
-  cancelReasonBox: {
-    marginTop: 12,
+  cancelToast: {
+    position: 'absolute',
+    top: 76,
+    left: 16,
+    right: 16,
+    zIndex: 40,
+    minHeight: 52,
+    borderRadius: rounded.default,
+    backgroundColor: '#006c49',
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#001f14',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: {width: 0, height: 5},
+    elevation: 7,
+  },
+  cancelToastText: {
+    flex: 1,
+    fontFamily: fontFamily.bold,
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  cancelReasonBox: {    marginTop: 12,
     borderRadius: rounded.default,
     backgroundColor: '#fef2f2',
     borderWidth: 1,

@@ -1,4 +1,4 @@
-﻿import messaging from '@react-native-firebase/messaging';
+import messaging from '@react-native-firebase/messaging';
 import {PermissionsAndroid, Platform} from 'react-native';
 import { apiClient } from '@/api/client';
 import {playConfirmationCue} from '@/utils/confirmationCue';
@@ -14,8 +14,9 @@ async function storeIncomingNotification(remoteMessage: any) {
   const accountTitle = remoteMessage?.data?.accountTitle;
 
   if (type === 'payment_request' && orderId) {
-    useAppStore.getState().setPendingPaymentOrderId(orderId);
-    void useAppStore.getState().fetchOrders();
+    // Refresh first so the modal receives the completed order and can calculate the remaining balance.
+    await useAppStore.getState().fetchOrders();
+    await useAppStore.getState().setPendingPaymentOrderId(orderId);
   }
 
   if (type === 'shop_order') {
