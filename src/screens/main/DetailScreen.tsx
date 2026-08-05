@@ -124,6 +124,8 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
         reviewCount === 1 ? 'review' : 'reviews'
       })`
     : 'No reviews yet';
+  const getReviewCustomerName = (review: ServiceReview) =>
+    review.customerName?.trim() || 'UstaadPro customer';
   const formatReviewDate = (value: string) => {
     const date = new Date(value);
 
@@ -316,64 +318,6 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
           </Pressable>
         </Pressable>
       </Modal>
-      <Modal
-        visible={reviewsVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setReviewsVisible(false)}
-      >
-        <View style={styles.reviewsModalOverlay}>
-          <View style={styles.reviewsModalCard}>
-            <View style={styles.reviewsModalHeader}>
-              <Text style={styles.reviewsModalTitle}>Service Reviews</Text>
-              <Pressable
-                style={styles.reviewsCloseButton}
-                onPress={() => setReviewsVisible(false)}
-              >
-                <Text style={styles.reviewsCloseText}>Close</Text>
-              </Pressable>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {reviews.length ? (
-                reviews.map(review => (
-                  <View key={review.id} style={styles.reviewCard}>
-                    <View style={styles.reviewTop}>
-                      <View style={styles.reviewAvatar}>
-                        <Text style={styles.reviewAvatarText}>
-                          {review.customerName.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={styles.reviewMeta}>
-                        <Text style={styles.reviewerName}>
-                          {review.customerName}
-                        </Text>
-                        <View style={styles.starsRow}>
-                          {[1, 2, 3, 4, 5].map(i => (
-                            <Star
-                              key={i}
-                              color="#F59E0B"
-                              size={12}
-                              fill={i <= review.rating ? '#F59E0B' : 'none'}
-                            />
-                          ))}
-                        </View>
-                      </View>
-                      <Text style={styles.reviewTime}>
-                        {formatReviewDate(review.createdAt)}
-                      </Text>
-                    </View>
-                    <Text style={styles.reviewText}>{review.comment}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.emptyReviewText}>
-                  No reviews yet for this service.
-                </Text>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
       <View style={styles.header}>
         <Pressable style={styles.iconBtn} onPress={() => navigation.goBack()}>
           <ArrowLeft color="#0b1c30" size={20} strokeWidth={2.2} />
@@ -558,12 +502,12 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
                 <View style={styles.reviewTop}>
                   <View style={styles.reviewAvatar}>
                     <Text style={styles.reviewAvatarText}>
-                      {review.customerName.charAt(0).toUpperCase()}
+                      {getReviewCustomerName(review).charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.reviewMeta}>
                     <Text style={styles.reviewerName}>
-                      {review.customerName}
+                      {getReviewCustomerName(review)}
                     </Text>
                     <View style={styles.starsRow}>
                       {[1, 2, 3, 4, 5].map(i => (
@@ -615,6 +559,59 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
           <Text style={styles.addCartText}>Add to cart</Text>
         </Pressable>
       </View>
+      {reviewsVisible ? (
+        <View style={styles.reviewsModalOverlay}>
+          <View style={styles.reviewsModalCard}>
+            <View style={styles.reviewsModalHeader}>
+              <Text style={styles.reviewsModalTitle}>Service Reviews</Text>
+              <Pressable
+                style={styles.reviewsCloseButton}
+                onPress={() => setReviewsVisible(false)}
+              >
+                <Text style={styles.reviewsCloseText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {reviews.length ? (
+                reviews.map(review => (
+                  <View key={review.id} style={styles.reviewCard}>
+                    <View style={styles.reviewTop}>
+                      <View style={styles.reviewAvatar}>
+                        <Text style={styles.reviewAvatarText}>
+                          {getReviewCustomerName(review).charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.reviewMeta}>
+                        <Text style={styles.reviewerName}>
+                          {getReviewCustomerName(review)}
+                        </Text>
+                        <View style={styles.starsRow}>
+                          {[1, 2, 3, 4, 5].map(i => (
+                            <Star
+                              key={i}
+                              color="#F59E0B"
+                              size={12}
+                              fill={i <= review.rating ? '#F59E0B' : 'none'}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                      <Text style={styles.reviewTime}>
+                        {formatReviewDate(review.createdAt)}
+                      </Text>
+                    </View>
+                    <Text style={styles.reviewText}>{review.comment}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyReviewText}>
+                  No reviews yet for this service.
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -763,7 +760,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   reviewsModalOverlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(11, 28, 48, 0.45)',
     justifyContent: 'flex-end',
   },
