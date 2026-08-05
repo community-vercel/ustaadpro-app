@@ -4,6 +4,7 @@ import {
   GestureResponderEvent,
   Image,
   LayoutChangeEvent,
+  Linking,
   Modal,
   Pressable,
   StatusBar,
@@ -285,6 +286,7 @@ export default function App(): React.JSX.Element {
   const [locating, setLocating] = useState(false);
   const [pinningLocation, setPinningLocation] = useState(false);
   const [locationError, setLocationError] = useState('');
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
   const [detectedLocation, setDetectedLocation] =
     useState<SavedLocation | null>(null);
   const [locationPromptStarted, setLocationPromptStarted] = useState(false);
@@ -354,6 +356,7 @@ export default function App(): React.JSX.Element {
         if (!seen && !savedServiceLocation && !savedShopLocation) {
           setDetectedLocation(null);
           setLocationError('');
+          setLocationPermissionDenied(false);
           setLocationPromptStarted(false);
           setLocationPromptVisible(true);
         }
@@ -376,8 +379,15 @@ export default function App(): React.JSX.Element {
       !locationError
     ) {
       setLocationPromptStarted(true);
-      void detectStartupLocation();
+      // Wait for the "Set your location" modal to finish presenting before
+      // triggering the native iOS permission alert - firing both at once can
+      // leave the modal visible but unresponsive to touches on iOS.
+      const timer = setTimeout(() => {
+        void detectStartupLocation();
+      }, 500);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [
     detectedLocation,
     locationError,
@@ -393,6 +403,7 @@ export default function App(): React.JSX.Element {
   const detectStartupLocation = async () => {
     setLocating(true);
     setLocationError('');
+    setLocationPermissionDenied(false);
     try {
       const location = await withTimeout(
         locateCurrentAddress(),
@@ -408,6 +419,15 @@ export default function App(): React.JSX.Element {
       };
       setDetectedLocation(savedLocation);
     } catch (error: any) {
+      if (error?.code === 'LOCATION_PERMISSION_DENIED') {
+        setLocationPermissionDenied(true);
+        setLocationError(
+          'Location access is turned off for this app. Enable it in Settings to detect your area automatically.',
+        );
+        setLocationPromptStarted(false);
+        setLocating(false);
+        return;
+      }
       setLocationError(
         error?.message || 'Could not detect your current location.',
       );
@@ -535,18 +555,26 @@ export default function App(): React.JSX.Element {
               </Pressable>
               <Pressable
                 style={styles.locationPrimaryButton}
-                onPress={() =>
-                  detectedLocation
-                    ? void saveStartupLocation()
-                    : void detectStartupLocation()
-                }
+                onPress={() => {
+                  if (detectedLocation) {
+                    void saveStartupLocation();
+                  } else if (locationPermissionDenied) {
+                    void Linking.openSettings();
+                  } else {
+                    void detectStartupLocation();
+                  }
+                }}
                 disabled={locating || pinningLocation}
               >
                 {locating ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : (
                   <Text style={styles.locationPrimaryText}>
-                    {detectedLocation ? 'Save location' : 'Detect location'}
+                    {detectedLocation
+                      ? 'Save location'
+                      : locationPermissionDenied
+                        ? 'Open Settings'
+                        : 'Detect location'}
                   </Text>
                 )}
               </Pressable>

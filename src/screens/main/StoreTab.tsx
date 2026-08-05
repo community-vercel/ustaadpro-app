@@ -265,6 +265,7 @@ export function StoreTab(): React.JSX.Element {
       return;
     }
 
+    setCartVisible(false);
     setDetailsConfirmVisible(true);
   };
 
@@ -405,7 +406,10 @@ export function StoreTab(): React.JSX.Element {
         visible={detailsConfirmVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setDetailsConfirmVisible(false)}
+        onRequestClose={() => {
+          setDetailsConfirmVisible(false);
+          setCartVisible(true);
+        }}
       >
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
@@ -439,7 +443,10 @@ export function StoreTab(): React.JSX.Element {
             <View style={styles.confirmActions}>
               <Pressable
                 style={styles.confirmEditButton}
-                onPress={() => setDetailsConfirmVisible(false)}
+                onPress={() => {
+                  setDetailsConfirmVisible(false);
+                  setCartVisible(true);
+                }}
                 disabled={checkingOut}
               >
                 <Text style={styles.confirmEditText}>Edit details</Text>
