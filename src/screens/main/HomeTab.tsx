@@ -18,6 +18,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import Svg, {ClipPath, Defs, Image as SvgImage, Path} from 'react-native-svg';
 import {
   Menu,
   Search,
@@ -191,6 +192,7 @@ export function HomeTab(): React.JSX.Element {
   const [sortOption, setSortOption] = useState<SortOption>('default');
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
   const drawerX = useRef(new Animated.Value(-320)).current;
+  const homeScrollRef = useRef<ScrollView>(null);
   const drawerClosing = useRef(false);
   const drawerOverlayOpacity = useRef(new Animated.Value(0)).current;
   const {width: viewportWidth} = useWindowDimensions();
@@ -647,7 +649,12 @@ export function HomeTab(): React.JSX.Element {
               </Pressable>
               <Pressable
                 style={styles.applyFilterButton}
-                onPress={() => setFilterVisible(false)}
+                onPress={() => {
+                  setFilterVisible(false);
+                  requestAnimationFrame(() => {
+                    homeScrollRef.current?.scrollTo({y: 0, animated: false});
+                  });
+                }}
               >
                 <Text style={styles.applyFilterText}>
                   Show {filteredServices.length} service
@@ -712,6 +719,7 @@ export function HomeTab(): React.JSX.Element {
       </View>
 
       <ScrollView
+        ref={homeScrollRef}
         style={{flex: 1}}
         contentContainerStyle={styles.content}
         refreshControl={
@@ -764,6 +772,8 @@ export function HomeTab(): React.JSX.Element {
         </View>
 
         {/* â”€â”€ Flash Sale Banner â”€â”€ */}
+        {!(normalizedSearch || activeFilterCount > 0) && (
+          <>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open ${banner.categoryTitle}`}
@@ -795,18 +805,31 @@ export function HomeTab(): React.JSX.Element {
             </View>
             <View style={styles.bannerImageBox}>
               {banner.imageUrl ? (
-                <Image
-                  source={{uri: banner.imageUrl}}
+                <Svg
+                  width="100%"
+                  height="100%"
                   style={styles.bannerImage}
-                  resizeMode="cover"
-                />
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="xMidYMid slice">
+                  <Defs>
+                    <ClipPath id="bannerImageCurveClip">
+                      <Path d="M0 0 H100 V100 H0 C20 76 20 24 0 0 Z" />
+                    </ClipPath>
+                  </Defs>
+                  <SvgImage
+                    href={{uri: banner.imageUrl}}
+                    width="100"
+                    height="100"
+                    preserveAspectRatio="xMidYMid slice"
+                    clipPath="url(#bannerImageCurveClip)"
+                  />
+                </Svg>
               ) : (
                 <Text style={styles.bannerImagePlaceholder}>
                   {banner.visual}
                 </Text>
               )}
             </View>
-            <View style={styles.bannerImageCurve} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Show next banner"
@@ -916,6 +939,9 @@ export function HomeTab(): React.JSX.Element {
           </View>
         )}
 
+          </>
+        )}
+
         {(normalizedSearch || activeFilterCount > 0) && (
           <View style={styles.servicesHeader}>
             <Text style={styles.sectionTitle2}>Filtered Services</Text>
@@ -925,15 +951,41 @@ export function HomeTab(): React.JSX.Element {
         {(normalizedSearch || activeFilterCount > 0) && filteredServices.map(service => (
           <Pressable
             key={service.id}
-            style={styles.serviceCard}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${service.title}`}
+            style={({pressed}) => [styles.serviceCard, pressed && styles.serviceCardPressed]}
             onPress={() => navigation.navigate('Detail', {serviceId: service.id})}>
+            <View style={styles.serviceThumb}>
+              {service.imageUrl ? (
+                <Image source={{uri: service.imageUrl}} style={styles.serviceThumbImage} />
+              ) : (
+                <Wrench color="#006c49" size={25} strokeWidth={2} />
+              )}
+            </View>
             <View style={styles.serviceBody}>
-              <Text style={styles.serviceName}>{service.title}</Text>
-              <Text style={styles.serviceDesc} numberOfLines={2}>{service.description}</Text>
-              <Text style={styles.servicePrice}>{formatPkr(service.price)}</Text>
+              <Text style={styles.serviceName} numberOfLines={2}>{service.title}</Text>
+              <Text style={styles.serviceDesc} numberOfLines={1}>{service.description}</Text>
+              <View style={styles.resultPriceRow}>
+                <View>
+                  <Text style={styles.resultPriceLabel}>Starting from</Text>
+                  <Text style={styles.servicePrice}>{formatPkr(service.price)}</Text>
+                </View>
+                <View style={styles.resultArrow}>
+                  <ChevronRight color="#ffffff" size={17} strokeWidth={2.6} />
+                </View>
+              </View>
             </View>
           </Pressable>
         ))}
+        {(normalizedSearch || activeFilterCount > 0) && filteredServices.length === 0 && (
+          <View style={styles.noResultsCard}>
+            <View style={styles.noResultsIcon}>
+              <Search color="#006c49" size={24} strokeWidth={2} />
+            </View>
+            <Text style={styles.noResultsTitle}>No services found</Text>
+            <Text style={styles.noResultsText}>Try another service name or clear the selected filters.</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1359,7 +1411,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   bannerLeft: {
-    width: '58%',
+    // Keep all copy clear of the image curve on narrow phones.
+    width: '45%',
     zIndex: 1,
   },
   flashBadge: {
@@ -1403,27 +1456,22 @@ const styles = StyleSheet.create({
   },
   bannerImageBox: {
     position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: '46%',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    // One-pixel bleed prevents device-scale rounding from exposing gaps.
+    right: -1,
+    top: -1,
+    bottom: -1,
+    width: '49%',
+    backgroundColor: '#006C49',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  bannerImageCurve: {
-    position: 'absolute',
-    right: '38%',
-    top: -32,
-    bottom: -32,
-    width: 84,
-    borderTopRightRadius: 84,
-    borderBottomRightRadius: 84,
-    zIndex: 1,
-    backgroundColor: '#006C49',
-  },
   bannerImage: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     width: '100%',
     height: '100%',
   },
@@ -1628,30 +1676,45 @@ const styles = StyleSheet.create({
   // Service Cards
   serviceName: {
     fontFamily: fontFamily.extraBold,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 19,
     color: '#0b1c30',
   },
   serviceDesc: {
-    marginTop: 5,
+    marginTop: 3,
     fontFamily: fontFamily.regular,
     fontSize: 12,
     lineHeight: 17,
     color: '#76777d',
   },
   serviceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: rounded.xl,
+    borderRadius: 18,
     marginHorizontal: 16,
-    marginBottom: 18,
+    marginBottom: 12,
+    padding: 10,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#e5eeff',
-    elevation: 4,
+    elevation: 2,
     shadowColor: '#0b1c30',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: {width: 0, height: 4},
   },
+  serviceCardPressed: {opacity: 0.88, transform: [{scale: 0.985}]},
+  serviceThumb: {
+    width: 76,
+    height: 76,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#eff8f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serviceThumbImage: {width: '100%', height: '100%'},
   serviceHero: {
     height: 128,
     overflow: 'hidden',
@@ -1687,7 +1750,7 @@ const styles = StyleSheet.create({
     color: '#006c49',
     fontSize: 12,
   },
-  serviceBody: {padding: 13, paddingTop: 11},
+  serviceBody: {flex: 1, paddingLeft: 12},
   serviceDescription: {
     fontFamily: fontFamily.medium,
     fontSize: 13.5,
@@ -1713,6 +1776,9 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#0b1c30',
   },
+  resultPriceRow: {flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 7},
+  resultPriceLabel: {fontFamily: fontFamily.medium, fontSize: 9.5, color: '#76777d', marginBottom: 1},
+  resultArrow: {width: 30, height: 30, borderRadius: 15, backgroundColor: '#006c49', alignItems: 'center', justifyContent: 'center'},
   bookBtn: {
     backgroundColor: '#0b1c30',
     borderRadius: rounded.default,

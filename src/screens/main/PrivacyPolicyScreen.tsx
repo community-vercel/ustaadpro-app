@@ -10,6 +10,8 @@ import {
   ReceiptText,
   Trash2,
   UserCheck,
+  WalletCards,
+  Gift,
 } from 'lucide-react-native';
 import {RootStackParamList} from '@/navigation/types';
 import {colors} from '@/theme/colors';
@@ -46,6 +48,24 @@ const sections = [
     Icon: ReceiptText,
   },
   {
+    title: 'UstaadPro Wallet',
+    body:
+      'Your wallet balance is shown in Profile and may contain refunds or account credits. When a booking is marked Cancelled, UstaadPro credits the verified EasyPaisa amount paid for that booking back to your wallet. Pending or rejected payment receipts are not credited, and the same cancellation is credited only once. To use the balance, select Use wallet balance on the booking screen. The app applies up to the final booking total; that amount is deducted when checkout is accepted. If the wallet is smaller than the total, only the remaining amount is payable through the selected method. If it covers the total, no EasyPaisa receipt is required. If booking creation fails, the deduction is restored. Wallet credit is linked to your account and is not transferable cash.',
+    Icon: WalletCards,
+  },
+  {
+    title: 'Reward points',
+    body:
+      'When rewards are enabled, the number of points configured by UstaadPro is added once when an eligible service booking is marked Completed. The booking screen shows your points, the current rupee value of each point, the minimum value required to redeem, and the maximum percentage allowed for that service. Select Use reward points before confirming. The app uses only whole redeemable points, limits the discount to the configured percentage of the service subtotal, and deducts those points when checkout is accepted. Wallet funds are applied after the reward discount, inspection fee, platform charges, and tax are calculated. If an order is cancelled, redeemed points are restored and points earned from that order are removed. Points are promotional and cannot be transferred, withdrawn, or exchanged for cash.',
+    Icon: Gift,
+  },
+  {
+    title: 'Wallet, reward, and payment records',
+    body:
+      'For each booking, we keep the original total, reward discount and points redeemed or earned, wallet amount used, remaining payable total, payment receipt amount and verification status, cancellation reason, and any cancellation refund entry. These records prevent duplicate refunds or redemptions and support payment reconciliation, complaints, and account assistance. UstaadPro does not ask for or store your EasyPaisa PIN in the app.',
+    Icon: LockKeyhole,
+  },
+  {
     title: 'Data protection',
     body:
       'We keep account data linked to the signed-in user. Profile photos, addresses, orders, and reviews are not shared across different users.',
@@ -77,7 +97,7 @@ export function PrivacyPolicyScreen({
           <Text style={styles.heroTitle}>Your privacy matters</Text>
           <Text style={styles.heroText}>
             This page explains how Ustaad Pro uses the information needed to run
-            bookings, shopping orders, account recovery, and notifications.
+            bookings, wallet funds, reward points, shopping orders, account recovery, and notifications.
           </Text>
         </View>
 

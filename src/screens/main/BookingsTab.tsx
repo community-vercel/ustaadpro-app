@@ -957,9 +957,16 @@ export function BookingsTab(): React.JSX.Element {
               ) : null}
             </View>
             {paymentTarget?.paymentMethod === 'Rs 200 Advance' ? (
-              <Text style={styles.paymentBalanceHint}>
-                Remaining after service: {formatPkr(remainingAfterPayment)}
-              </Text>
+              <View style={styles.paymentBalanceCard}>
+                <View style={styles.paymentBalanceIcon}>
+                  <CreditCard color="#b45309" size={20} strokeWidth={2.2} />
+                </View>
+                <View style={styles.paymentBalanceContent}>
+                  <Text style={styles.paymentBalanceLabel}>Remaining balance</Text>
+                  <Text style={styles.paymentBalanceAmount}>{formatPkr(remainingAfterPayment)}</Text>
+                  <Text style={styles.paymentBalanceHint}>Pay after service completion</Text>
+                </View>
+              </View>
             ) : null}
             {!isCashPayment(paymentTarget?.paymentMethod) && visibleReceiptUrl ? (
               <View style={styles.uploadedReceiptBox}>
@@ -1553,11 +1560,43 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
   },
-    paymentBalanceHint: {
-    marginTop: 10,
-    fontFamily: fontFamily.medium,
-    color: colors.muted,
+  paymentBalanceCard: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderRadius: rounded.default,
+    borderWidth: 1,
+    borderColor: '#f4c96b',
+    backgroundColor: '#fff8e7',
+    padding: 12,
+  },
+  paymentBalanceIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffedbd',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentBalanceContent: {flex: 1},
+  paymentBalanceLabel: {
+    fontFamily: fontFamily.bold,
+    color: '#92400e',
     fontSize: 12,
+  },
+  paymentBalanceAmount: {
+    marginTop: 1,
+    fontFamily: fontFamily.extraBold,
+    fontWeight: '900',
+    color: '#78350f',
+    fontSize: 20,
+  },
+  paymentBalanceHint: {
+    marginTop: 2,
+    fontFamily: fontFamily.medium,
+    color: '#a16207',
+    fontSize: 11,
   },
   paymentSuccessIcon: {
     alignSelf: 'center',

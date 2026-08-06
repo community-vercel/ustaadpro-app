@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Clock3,
   Gift,
+  WalletCards,
   MessageCircle,
   LocateFixed,
   MapPin,
@@ -312,6 +313,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   const [locatingAddress, setLocatingAddress] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('Rs 200 Advance');
   const [useRewardPoints, setUseRewardPoints] = useState(false);
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [detailsConfirmVisible, setDetailsConfirmVisible] = useState(false);
@@ -487,6 +489,9 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
     (taxableSubtotal * Number(appSettings.serviceTaxPercent || 0)) / 100,
   );
   const total = taxableSubtotal + inspectionFee + tax;
+  const walletBalance = Math.max(0, Number(user?.walletBalance || 0));
+  const walletAdjustment = useWalletBalance ? Math.min(walletBalance, total) : 0;
+  const amountToPay = Math.max(0, total - walletAdjustment);
   const selectedTimeClosed = isClosedTime(selectedTime);
   const minimumBookingLeadHours = Math.max(0, Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)));
   const selectedTimeTooSoon = isBeforeBookingLeadTime(selectedTime, selectedDay, minimumBookingLeadHours);
@@ -728,12 +733,15 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
         tax,
         recurringOccurrences,
         useRewardPoints: useRewardPoints && canRedeemRewardForBooking,
+        useWalletBalance: useWalletBalance && walletBalance > 0,
       });
 
       // Both supported methods are EasyPaisa advance payments. Persist the
       // order ID before opening the payment screen, so returning from the
       // EasyPaisa app can resume receipt upload without creating a duplicate.
-      await setPendingPaymentOrderId(order.id);
+      if (Number(order.total || 0) > 0) {
+        await setPendingPaymentOrderId(order.id);
+      }
       navigation.navigate('Main', { screen: 'Bookings' });
     } catch (error: any) {
       showMessage({
@@ -1530,6 +1538,22 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
               );
             })}
           </View>
+          <Pressable
+            style={[styles.rewardBox, useWalletBalance && styles.rewardBoxActive, walletBalance <= 0 && styles.rewardBoxDisabled]}
+            disabled={walletBalance <= 0}
+            onPress={() => setUseWalletBalance(value => !value)}>
+            <View style={styles.rewardIconBox}>
+              <WalletCards color="#006c49" size={21} strokeWidth={2.2} />
+            </View>
+            <View style={styles.rewardCopy}>
+              <Text style={styles.rewardTitle}>Use wallet balance</Text>
+              <Text style={styles.rewardText}>Available: {formatPkr(walletBalance)}</Text>
+              <Text style={styles.rewardHint}>{walletBalance > 0 ? `Apply up to ${formatPkr(Math.min(walletBalance, total))} to this booking.` : 'No wallet balance is available.'}</Text>
+            </View>
+            <View style={[styles.rewardCheckbox, useWalletBalance && styles.rewardCheckboxChecked]}>
+              {useWalletBalance ? <Check color="#ffffff" size={14} strokeWidth={3} /> : null}
+            </View>
+          </Pressable>
 
           {/* ——— Fee Summary ——— */}
           {rewardEnabled && user ? (
@@ -1620,22 +1644,28 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
               </Text>
               <Text style={styles.summaryValue}>{formatPkr(tax)}</Text>
             </View>
+            {walletAdjustment > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.rewardSummaryLabel}>Wallet balance applied</Text>
+                <Text style={styles.rewardSummaryValue}>-{formatPkr(walletAdjustment)}</Text>
+              </View>
+            ) : null}
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryTotalLabel}>Total Amount</Text>
-              <Text style={styles.summaryTotal}>{formatPkr(total)}</Text>
+              <Text style={styles.summaryTotalLabel}>{walletAdjustment > 0 ? 'Amount to Pay' : 'Total Amount'}</Text>
+              <Text style={styles.summaryTotal}>{formatPkr(amountToPay)}</Text>
             </View>
-            {selectedPayment === 'Rs 200 Advance' && (
+            {selectedPayment === 'Rs 200 Advance' && amountToPay > 0 && (
               <View style={styles.advanceNote}>
                 <Text style={styles.advanceNoteText}>
-                  Rs 200 advance via Easypaisa required. Remaining {formatPkr(Math.max(0, total - 200))} payable after service.
+                  {formatPkr(Math.min(200, amountToPay))} advance via Easypaisa required. Remaining {formatPkr(Math.max(0, amountToPay - 200))} payable after service.
                 </Text>
               </View>
             )}
-            {selectedPayment === 'Full Payment in Advance' && (
+            {selectedPayment === 'Full Payment in Advance' && amountToPay > 0 && (
               <View style={styles.advanceNoteGreen}>
                 <Text style={styles.advanceNoteGreenText}>
-                  Full amount {formatPkr(total)} payable via Easypaisa in advance. 5% discount already applied!
+                  Full amount {formatPkr(amountToPay)} payable via Easypaisa in advance. 5% discount already applied!
                 </Text>
               </View>
             )}

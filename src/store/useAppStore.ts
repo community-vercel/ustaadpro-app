@@ -1033,6 +1033,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         tax: checkoutDetails.tax,
         recurringOccurrences: checkoutDetails.recurringOccurrences,
         useRewardPoints: Boolean(checkoutDetails.useRewardPoints),
+        useWalletBalance: Boolean(checkoutDetails.useWalletBalance),
       };
 
       const response = await apiClient.post('/orders/checkout', payload);

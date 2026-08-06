@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -73,6 +74,7 @@ export function ComplaintsScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -91,6 +93,17 @@ export function ComplaintsScreen() {
       console.log('Failed to fetch data:', err);
     } finally {
       setInitialLoading(false);
+    }
+  };
+
+  const refreshComplaints = async () => {
+    setRefreshing(true);
+    try {
+      setComplaints(await fetchMyComplaints());
+    } catch (err) {
+      console.log('Failed to refresh complaints:', err);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -196,7 +209,17 @@ export function ComplaintsScreen() {
 
       {viewMode === 'list' ? (
         <View style={{ flex: 1 }}>
-          <ScrollView style={{flex: 1}} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            style={{flex: 1}}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={refreshComplaints}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }>
             {complaints.length === 0 ? (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
                 <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#eff4ff', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>

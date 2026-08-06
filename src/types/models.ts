@@ -208,6 +208,8 @@ export interface Order {
   rewardPointsEarned?: number;
   rewardPointsRedeemed?: number;
   rewardDiscount?: number;
+  walletUsed?: number;
+  originalTotal?: number;
   paymentReceipt?: {
     id: number;
     receiptUrl: string;
