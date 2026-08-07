@@ -192,6 +192,7 @@ export function HomeTab(): React.JSX.Element {
   const [menuVisible, setMenuVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [homeContentVersion, setHomeContentVersion] = useState(0);
   const [deleteSuccessVisible, setDeleteSuccessVisible] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -305,6 +306,18 @@ export function HomeTab(): React.JSX.Element {
   const confirmDeleteAccount = () => {
     if (deletingAccount) return;
     setDeleteModalVisible(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (deletingAccount) return;
+    setDeleteModalVisible(false);
+    setMenuVisible(false);
+    drawerClosing.current = false;
+    drawerX.setValue(-320);
+    drawerOverlayOpacity.setValue(0);
+    // Android can leave the underlying native ScrollView surface blank after
+    // dismissing a transparent modal. Remount only its content surface.
+    setHomeContentVersion(version => version + 1);
   };
 
   const deleteAccount = async () => {
@@ -624,13 +637,14 @@ export function HomeTab(): React.JSX.Element {
         </Animated.View>
       ) : null}
 
+      {deleteModalVisible ? (
       <Modal
-        visible={deleteModalVisible}
+        visible
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => !deletingAccount && setDeleteModalVisible(false)}>
-        <Pressable style={styles.deleteOverlay} onPress={() => !deletingAccount && setDeleteModalVisible(false)}>
+        onRequestClose={closeDeleteModal}>
+        <Pressable style={styles.deleteOverlay} onPress={closeDeleteModal}>
           <Pressable style={styles.deleteDialog} onPress={event => event.stopPropagation()}>
             <View style={styles.deleteIconWrap}>
               <Trash2 color="#ba1a1a" size={25} strokeWidth={2.3} />
@@ -642,7 +656,7 @@ export function HomeTab(): React.JSX.Element {
               This action cannot be undone.
             </Text>
             <View style={styles.deleteActions}>
-              <Pressable disabled={deletingAccount} style={({pressed}) => [styles.deleteCancelButton, pressed && styles.pressed]} onPress={() => setDeleteModalVisible(false)}>
+              <Pressable disabled={deletingAccount} style={({pressed}) => [styles.deleteCancelButton, pressed && styles.pressed]} onPress={closeDeleteModal}>
                 <Text style={styles.deleteCancelText}>Cancel</Text>
               </Pressable>
               <Pressable disabled={deletingAccount} style={({pressed}) => [styles.deleteConfirmButton, deletingAccount && styles.deleteButtonDisabled, pressed && styles.pressed]} onPress={deleteAccount}>
@@ -653,6 +667,7 @@ export function HomeTab(): React.JSX.Element {
           </Pressable>
         </Pressable>
       </Modal>
+      ) : null}
       <Modal
         visible={deleteSuccessVisible}
         transparent
@@ -822,6 +837,7 @@ export function HomeTab(): React.JSX.Element {
       </View>
 
       <ScrollView
+        key={`home-content-${homeContentVersion}`}
         ref={homeScrollRef}
         style={{flex: 1}}
         contentContainerStyle={styles.content}
