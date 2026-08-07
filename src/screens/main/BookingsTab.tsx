@@ -396,6 +396,9 @@ export function BookingsTab(): React.JSX.Element {
   const remainingAfterPayment = paymentTarget
     ? Math.max(0, Number(paymentTarget.total || 0) - paymentAmountDue)
     : 0;
+  const displayedRemainingBalance = isRemainingBalancePayment
+    ? paymentAmountDue
+    : remainingAfterPayment;
   const copyPaymentNumber = () => {
     Clipboard.setString(EASYPAISA_ACCOUNT_NUMBER);
     Alert.alert('Copied', 'EasyPaisa account number copied successfully.');
@@ -963,8 +966,10 @@ export function BookingsTab(): React.JSX.Element {
                 </View>
                 <View style={styles.paymentBalanceContent}>
                   <Text style={styles.paymentBalanceLabel}>Remaining balance</Text>
-                  <Text style={styles.paymentBalanceAmount}>{formatPkr(remainingAfterPayment)}</Text>
-                  <Text style={styles.paymentBalanceHint}>Pay after service completion</Text>
+                  <Text style={styles.paymentBalanceAmount}>{formatPkr(displayedRemainingBalance)}</Text>
+                  <Text style={styles.paymentBalanceHint}>
+                    {isRemainingBalancePayment ? 'Outstanding amount due now' : 'Pay after service completion'}
+                  </Text>
                 </View>
               </View>
             ) : null}

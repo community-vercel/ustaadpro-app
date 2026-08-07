@@ -74,7 +74,7 @@ const sections = [
   {
     title: 'Deleting your account',
     body:
-      'To request account deletion, contact us from your registered email or include your registered phone number so we can verify the request.',
+      'Signed-in users can permanently delete their account from the Home burger menu by selecting Delete Account and confirming the warning. Account deletion removes account access and associated app records and cannot be undone. Contact support if you cannot access your account.',
     Icon: Trash2,
   },
 ];

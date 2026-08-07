@@ -466,7 +466,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         user,
       });
     } catch (error) {
-      console.error('Phone login error:', error);
+      // LoginScreen presents expected API failures, including deleted accounts.
+      // Avoid sending handled 404 responses to React Native development LogBox.
       throw error;
     }
   },

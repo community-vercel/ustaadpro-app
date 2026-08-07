@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Image,
   Modal,
@@ -44,6 +45,8 @@ import {
   Cctv,
   Layers,
   AlertCircle,
+  CheckCircle2,
+  Trash2,
 } from 'lucide-react-native';
 import {RootStackParamList} from '@/navigation/types';
 import {useAppStore} from '@/store/useAppStore';
@@ -53,6 +56,7 @@ import {formatPkr} from '@/utils/currency';
 import {rounded} from '@/theme/layout';
 import {HomeSlide, ServiceCategory, ServiceCategoryId} from '@/types/models';
 import {NotificationCenter} from '@/components/NotificationCenter';
+import {apiClient} from '@/api/client';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SortOption = 'default' | 'priceLow' | 'priceHigh' | 'rating';
@@ -187,6 +191,9 @@ export function HomeTab(): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteSuccessVisible, setDeleteSuccessVisible] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [sortOption, setSortOption] = useState<SortOption>('default');
@@ -294,6 +301,27 @@ export function HomeTab(): React.JSX.Element {
   const activeFilterCount =
     (selectedCategoryId !== 'all' ? 1 : 0) + (sortOption !== 'default' ? 1 : 0);
 
+  const confirmDeleteAccount = () => {
+    if (deletingAccount) return;
+    setDeleteModalVisible(true);
+  };
+
+  const deleteAccount = async () => {
+    try {
+      setDeletingAccount(true);
+      await apiClient.delete('/auth/account');
+      setDeleteModalVisible(false);
+      setDeleteSuccessVisible(true);
+    } catch (error: any) {
+      Alert.alert('Could not delete account', error.response?.data?.message || 'Please try again.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+  const finishDeletedAccount = async () => {
+    setDeleteSuccessVisible(false);
+    await logout();
+  };
   const menuItems = useMemo(
     () => [
       {
@@ -343,6 +371,9 @@ export function HomeTab(): React.JSX.Element {
         Icon: FileText,
         onPress: () => navigation.navigate('PrivacyPolicy'),
       },
+      ...(user
+        ? [{label: deletingAccount ? 'Deleting Account...' : 'Delete Account', Icon: Trash2, onPress: confirmDeleteAccount}]
+        : []),
       user
         ? {
             label: 'Sign out',
@@ -359,7 +390,7 @@ export function HomeTab(): React.JSX.Element {
             },
           },
     ],
-    [logout, navigation, user],
+    [deletingAccount, logout, navigation, user],
   );
 
   useEffect(() => {
@@ -557,14 +588,15 @@ export function HomeTab(): React.JSX.Element {
                 key={item.label}
                 style={({pressed}) => [
                   styles.menuItem,
+                  item.label.includes('Account') && styles.menuItemDanger,
                   pressed && styles.menuItemPressed,
                 ]}
                 onPress={() => handleMenuPress(item.onPress)}
               >
                 <View style={styles.menuItemIcon}>
-                  <item.Icon color="#0b1c30" size={18} strokeWidth={2.2} />
+                  <item.Icon color={item.label.includes('Account') ? '#ba1a1a' : '#0b1c30'} size={18} strokeWidth={2.2} />
                 </View>
-                <Text style={styles.menuItemText}>{item.label}</Text>
+                <Text style={[styles.menuItemText, item.label.includes('Account') && styles.menuItemDangerText]}>{item.label}</Text>
                 <ChevronRight color="#76777d" size={18} strokeWidth={2.2} />
               </Pressable>
             ))}
@@ -572,6 +604,57 @@ export function HomeTab(): React.JSX.Element {
         </Animated.View>
       ) : null}
 
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => !deletingAccount && setDeleteModalVisible(false)}>
+        <Pressable style={styles.deleteOverlay} onPress={() => !deletingAccount && setDeleteModalVisible(false)}>
+          <Pressable style={styles.deleteDialog} onPress={event => event.stopPropagation()}>
+            <View style={styles.deleteIconWrap}>
+              <Trash2 color="#ba1a1a" size={25} strokeWidth={2.3} />
+            </View>
+            <Text style={styles.deleteTitle}>Delete account permanently?</Text>
+            <Text style={styles.deleteMessage}>
+              This will permanently delete your profile, bookings, store orders,
+              addresses, reviews, complaints, wallet balance, and reward points.
+              This action cannot be undone.
+            </Text>
+            <View style={styles.deleteActions}>
+              <Pressable disabled={deletingAccount} style={({pressed}) => [styles.deleteCancelButton, pressed && styles.pressed]} onPress={() => setDeleteModalVisible(false)}>
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable disabled={deletingAccount} style={({pressed}) => [styles.deleteConfirmButton, deletingAccount && styles.deleteButtonDisabled, pressed && styles.pressed]} onPress={deleteAccount}>
+                {deletingAccount ? <ActivityIndicator color="#ffffff" size="small" /> : null}
+                <Text style={styles.deleteConfirmText}>{deletingAccount ? 'Deleting...' : 'Yes, Delete'}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={deleteSuccessVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => void finishDeletedAccount()}>
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteDialog}>
+            <View style={styles.deleteSuccessIconWrap}>
+              <CheckCircle2 color="#ffffff" size={28} strokeWidth={2.6} />
+            </View>
+            <Text style={styles.deleteTitle}>Account deleted</Text>
+            <Text style={styles.deleteMessage}>
+              Your UstaadPro account and associated information have been
+              permanently deleted.
+            </Text>
+            <Pressable style={({pressed}) => [styles.deleteContinueButton, pressed && styles.pressed]} onPress={() => void finishDeletedAccount()}>
+              <Text style={styles.deleteConfirmText}>Continue</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={filterVisible}
         transparent
@@ -1112,6 +1195,21 @@ const styles = StyleSheet.create({
   menuItemPressed: {
     backgroundColor: '#eff4ff',
   },
+  menuItemDanger: {backgroundColor: '#fff5f5', marginTop: 6},
+  menuItemDangerText: {color: '#ba1a1a'},
+  deleteOverlay: {flex: 1, backgroundColor: 'rgba(11,28,48,0.56)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22},
+  deleteDialog: {width: '100%', maxWidth: 390, borderRadius: 24, backgroundColor: '#ffffff', padding: 22, elevation: 18, shadowColor: '#0b1c30', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: {width: 0, height: 12}},
+  deleteIconWrap: {width: 50, height: 50, borderRadius: 25, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center', marginBottom: 16},
+  deleteTitle: {fontFamily: fontFamily.extraBold, fontWeight: '900', color: '#0b1c30', fontSize: 20},
+  deleteMessage: {fontFamily: fontFamily.regular, color: '#5f6470', fontSize: 13.5, lineHeight: 20, marginTop: 8},
+  deleteActions: {flexDirection: 'row', gap: 10, marginTop: 22},
+  deleteCancelButton: {flex: 1, height: 48, borderRadius: 13, borderWidth: 1, borderColor: '#d7dbe4', alignItems: 'center', justifyContent: 'center'},
+  deleteCancelText: {fontFamily: fontFamily.bold, color: '#0b1c30', fontSize: 14},
+  deleteConfirmButton: {flex: 1.25, height: 48, borderRadius: 13, backgroundColor: '#ba1a1a', flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center'},
+  deleteConfirmText: {fontFamily: fontFamily.bold, color: '#ffffff', fontSize: 14},
+  deleteButtonDisabled: {opacity: 0.7},
+  deleteSuccessIconWrap: {width: 54, height: 54, borderRadius: 27, backgroundColor: '#006c49', alignItems: 'center', justifyContent: 'center', marginBottom: 16},
+  deleteContinueButton: {height: 48, marginTop: 22, borderRadius: 13, backgroundColor: '#006c49', alignItems: 'center', justifyContent: 'center'},
   menuItemIcon: {
     width: 34,
     height: 34,
