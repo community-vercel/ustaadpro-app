@@ -13,7 +13,11 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthNavigator } from '@/navigation/AuthNavigator';
@@ -54,6 +58,7 @@ type MapSize = {
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
+const rootNavigationRef = createNavigationContainerRef<RootStackParamList>();
 const LOCATION_PROMPT_SEEN_KEY = 'startup_location_prompt_seen';
 const LOCATION_PERMISSION_REQUESTED_KEY = 'startup_location_permission_requested';
 const STARTUP_LOCATION_TIMEOUT_MS = 15000;
@@ -269,6 +274,13 @@ export default function App(): React.JSX.Element {
   const isGuest = useAppStore(state => state.isGuest);
   const user = useAppStore(state => state.user);
   const isOnboarded = useAppStore(state => state.isOnboarded);
+  const fetchOrders = useAppStore(state => state.fetchOrders);
+  const pendingPaymentOrderId = useAppStore(
+    state => state.pendingPaymentOrderId,
+  );
+  const setPendingPaymentOrderId = useAppStore(
+    state => state.setPendingPaymentOrderId,
+  );
   const hydrateAppState = useAppStore(state => state.hydrateAppState);
   const hydrateNotifications = useAppStore(
     state => state.hydrateNotifications,
@@ -325,6 +337,52 @@ export default function App(): React.JSX.Element {
     };
   }, [booting, isAuthenticated]);
 
+  useEffect(() => {
+    if (booting || !isAuthenticated) {
+      return undefined;
+    }
+
+    const refreshPaymentStatus = async () => {
+      await fetchOrders();
+      const freshOrders = useAppStore.getState().orders;
+      const outstandingOrder = freshOrders.find(order => {
+        if (
+          order.status !== 'completed' ||
+          order.paymentMethod !== 'Rs 200 Advance'
+        ) {
+          return false;
+        }
+        const validReceipts = (order.paymentReceipts || []).filter(
+          receipt => receipt.status !== 'rejected',
+        );
+        const hasAdvance = validReceipts.some(
+          receipt => receipt.paymentStage === 'advance',
+        );
+        const hasRemaining = validReceipts.some(
+          receipt => receipt.paymentStage === 'remaining',
+        );
+        return hasAdvance && !hasRemaining;
+      });
+
+      if (
+        outstandingOrder &&
+        useAppStore.getState().pendingPaymentOrderId !== outstandingOrder.id
+      ) {
+        await setPendingPaymentOrderId(outstandingOrder.id);
+      }
+    };
+
+    void refreshPaymentStatus();
+    const paymentStatusTimer = setInterval(refreshPaymentStatus, 4000);
+    return () => clearInterval(paymentStatusTimer);
+  }, [booting, fetchOrders, isAuthenticated, setPendingPaymentOrderId]);
+
+  useEffect(() => {
+    if (!pendingPaymentOrderId || !rootNavigationRef.isReady()) {
+      return;
+    }
+    rootNavigationRef.navigate('Main', {screen: 'Bookings'});
+  }, [pendingPaymentOrderId]);
   const appIsOpen = isAuthenticated || isGuest;
   const locationPromptSeenKey = `${LOCATION_PROMPT_SEEN_KEY}:${user?.email || user?.phone || 'guest'
     }`;
@@ -582,7 +640,16 @@ export default function App(): React.JSX.Element {
           </View>
         </View>
       </Modal>
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer
+        ref={rootNavigationRef}
+        theme={navigationTheme}
+        onReady={() => {
+          const pendingOrderId = useAppStore.getState().pendingPaymentOrderId;
+          if (pendingOrderId) {
+            rootNavigationRef.navigate('Main', {screen: 'Bookings'});
+          }
+        }}
+      >
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           {appIsOpen ? (
             <>
