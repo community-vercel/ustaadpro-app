@@ -694,7 +694,40 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const response = await apiClient.get('/orders');
-      set({orders: response.data});
+      const orders = (Array.isArray(response.data) ? response.data : []).map(
+        (order: any) => ({
+          ...order,
+          paymentReceipt: order.paymentReceipt
+            ? {
+                ...order.paymentReceipt,
+                receiptUrl: String(
+                  order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                ).startsWith('data:image/')
+                  ? resolveApiAssetUrl(
+                      `/api/orders/${encodeURIComponent(order.id)}/receipts/${order.paymentReceipt.id}/image`,
+                    )
+                  : resolveApiAssetUrl(
+                      order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                    ),
+              }
+            : null,
+          paymentReceipts: (order.paymentReceipts || order.payment_receipts || []).map(
+            (receipt: any) => ({
+              ...receipt,
+              receiptUrl: String(
+                receipt.receiptUrl || receipt.receipt_url || '',
+              ).startsWith('data:image/')
+                ? resolveApiAssetUrl(
+                    `/api/orders/${encodeURIComponent(order.id)}/receipts/${receipt.id}/image`,
+                  )
+                : resolveApiAssetUrl(
+                    receipt.receiptUrl || receipt.receipt_url || '',
+                  ),
+            }),
+          ),
+        }),
+      );
+      set({orders});
       await refreshProfileState(set);
     } catch (error) {
       console.error('Fetch orders error:', error);

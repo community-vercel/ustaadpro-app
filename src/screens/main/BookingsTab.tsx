@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,10 +12,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {launchImageLibrary} from 'react-native-image-picker';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   ArrowLeft,
@@ -176,12 +177,20 @@ export function BookingsTab(): React.JSX.Element {
   const [paymentSuccessVisible, setPaymentSuccessVisible] = useState(false);
   const [paymentSuccessWasRemaining, setPaymentSuccessWasRemaining] = useState(false);
   const [paymentDeferredThisSession, setPaymentDeferredThisSession] = useState(false);
+  const lastPendingPaymentOrderId = useRef<string | null>(null);
   const paymentDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const seenNotificationIds = useRef<Set<string> | null>(null);
+  const previousOrderStatuses = useRef<Map<string, Order['status']> | null>(null);
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [receiptAuthToken, setReceiptAuthToken] = useState('');
+  useEffect(() => {
+    AsyncStorage.getItem('auth_token').then(token => {
+      setReceiptAuthToken(token || '');
+    });
+  }, []);
   const existingReceiptUrl = paymentTarget?.paymentReceipt?.receiptUrl
     ? resolveApiAssetUrl(paymentTarget.paymentReceipt.receiptUrl)
     : '';
@@ -228,6 +237,16 @@ export function BookingsTab(): React.JSX.Element {
       setLoading(false),
     );
   }, [fetchOrders, fetchServices]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchOrders();
+      const refreshTimer = setInterval(() => {
+        void fetchOrders();
+      }, 4000);
+      return () => clearInterval(refreshTimer);
+    }, [fetchOrders]),
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -456,7 +475,22 @@ export function BookingsTab(): React.JSX.Element {
     }
   };
   useEffect(() => {
-    if (!pendingPaymentOrderId || paymentTarget || paymentDeferredThisSession) {
+    if (!pendingPaymentOrderId) {
+      lastPendingPaymentOrderId.current = null;
+      return;
+    }
+
+    const pendingOrderChanged =
+      lastPendingPaymentOrderId.current !== pendingPaymentOrderId;
+    if (pendingOrderChanged) {
+      lastPendingPaymentOrderId.current = pendingPaymentOrderId;
+      setPaymentDeferredThisSession(false);
+    }
+
+    if (
+      paymentTarget?.id === pendingPaymentOrderId ||
+      (!pendingOrderChanged && paymentDeferredThisSession)
+    ) {
       return;
     }
 
@@ -480,6 +514,26 @@ export function BookingsTab(): React.JSX.Element {
       openPaymentModal(order);
     }
   }, [notifications, orders]);
+  useEffect(() => {
+    if (!orders.length) return;
+    const currentStatuses = new Map(
+      orders.map(order => [order.id, order.status] as const),
+    );
+    const previousStatuses = previousOrderStatuses.current;
+    previousOrderStatuses.current = currentStatuses;
+    if (!previousStatuses) return;
+
+    const newlyCompleted = orders.find(
+      order =>
+        previousStatuses.get(order.id) !== 'completed' &&
+        order.status === 'completed' &&
+        order.paymentMethod === 'Rs 200 Advance',
+    );
+    if (newlyCompleted) {
+      setPaymentDeferredThisSession(false);
+      openPaymentModal(newlyCompleted);
+    }
+  }, [orders]);
   const handleSubmitReview = async () => {
     if (!reviewTarget) {
       return;
@@ -934,8 +988,8 @@ export function BookingsTab(): React.JSX.Element {
                 : 'Transfer the amount to the EasyPaisa account below, then upload your receipt to confirm the booking.'}
             </Text>
             <View style={styles.paymentInfoBox}>
-              <Text style={styles.paymentInfoLabel}>Pay now</Text>
-              <Text style={styles.paymentInfoValue}>
+              <Text style={styles.paymentDueLabel}>Pay now</Text>
+              <Text style={styles.paymentDueAmount}>
                 {formatPkr(paymentAmountDue)}
               </Text>
               <Text style={styles.paymentInfoLabel}>Payment method</Text>
@@ -1238,7 +1292,15 @@ export function BookingsTab(): React.JSX.Element {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.receiptHistoryRow}>
                       {order.paymentReceipts.map(receipt => (
                         <View key={receipt.id} style={styles.receiptHistoryCard}>
-                          <Image source={{uri: resolveApiAssetUrl(receipt.receiptUrl)}} style={styles.receiptHistoryImage} />
+                          <Image
+                            source={{
+                              uri: resolveApiAssetUrl(receipt.receiptUrl),
+                              headers: receiptAuthToken
+                                ? {Authorization: `Bearer ${receiptAuthToken}`}
+                                : undefined,
+                            }}
+                            style={styles.receiptHistoryImage}
+                          />
                           <Text style={styles.receiptHistoryLabel} numberOfLines={1}>
                             {receipt.paymentStage === 'advance' ? 'Advance receipt' : receipt.paymentStage === 'remaining' ? 'Remaining receipt' : 'Full payment receipt'}
                           </Text>
@@ -1565,6 +1627,21 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
   },
+  paymentDueLabel: {
+    fontFamily: fontFamily.extraBold,
+    fontWeight: '900',
+    color: '#047857',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  paymentDueAmount: {
+    fontFamily: fontFamily.extraBold,
+    fontWeight: '900',
+    color: '#064e3b',
+    fontSize: 17,
+    lineHeight: 22,
+    marginBottom: 3,
+  },
   paymentBalanceCard: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1595,7 +1672,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.extraBold,
     fontWeight: '900',
     color: '#78350f',
-    fontSize: 20,
+    fontSize: 17,
   },
   paymentBalanceHint: {
     marginTop: 2,
@@ -1697,9 +1774,9 @@ const styles = StyleSheet.create({
   },
   receiptPreview: {
     width: '100%',
-    height: 150,
+    height: 105,
     borderRadius: rounded.default,
-    marginTop: 12,
+    marginTop: 6,
     backgroundColor: '#eef2ff',
   },
   reviewActions: {

@@ -14,9 +14,12 @@ async function storeIncomingNotification(remoteMessage: any) {
   const accountTitle = remoteMessage?.data?.accountTitle;
 
   if (type === 'payment_request' && orderId) {
-    // Refresh first so the modal receives the completed order and can calculate the remaining balance.
-    await useAppStore.getState().fetchOrders();
-    await useAppStore.getState().setPendingPaymentOrderId(orderId);
+    // Store the notification immediately, but only mark payment pending after
+    // the fresh completed order arrives so the modal never uses stale totals.
+    void (async () => {
+      await useAppStore.getState().fetchOrders();
+      await useAppStore.getState().setPendingPaymentOrderId(orderId);
+    })();
   }
 
   if (type === 'shop_order') {
