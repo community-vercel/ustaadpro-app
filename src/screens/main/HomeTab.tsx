@@ -204,6 +204,7 @@ export function HomeTab(): React.JSX.Element {
   const drawerOverlayOpacity = useRef(new Animated.Value(0)).current;
   const {width: viewportWidth} = useWindowDimensions();
   const [activeSlide, setActiveSlide] = useState(0);
+  const [sliderImagesReady, setSliderImagesReady] = useState(false);
   const slides = homeSlides.length ? homeSlides : FALLBACK_HEADER_SLIDES;
   const instantServiceChipWidth = Math.max(64, (viewportWidth - 56) / 4);
   const currentLocationText =
@@ -428,12 +429,31 @@ export function HomeTab(): React.JSX.Element {
   );
 
   useEffect(() => {
+    let active = true;
+    const imageUrls = slides
+      .map(slide => slide.imageUrl)
+      .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+    setSliderImagesReady(imageUrls.length === 0);
+    Promise.allSettled(imageUrls.map(imageUrl => Image.prefetch(imageUrl))).then(
+      () => {
+        if (active) setSliderImagesReady(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [slides]);
+
+  useEffect(() => {
+    if (!sliderImagesReady || slides.length < 2) {
+      return undefined;
+    }
     const timer = setInterval(() => {
       setActiveSlide(current => (current + 1) % slides.length);
     }, 3000);
 
     return () => clearInterval(timer);
-  }, [slides.length]);
+  }, [sliderImagesReady, slides.length]);
 
   const openDrawer = () => {
     drawerClosing.current = false;
@@ -887,31 +907,39 @@ export function HomeTab(): React.JSX.Element {
               </Pressable>
             </View>
             <View style={styles.bannerImageBox}>
-              {banner.imageUrl ? (
-                <Svg
-                  width="100%"
-                  height="100%"
-                  style={styles.bannerImage}
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="xMidYMid slice">
-                  <Defs>
-                    <ClipPath id="bannerImageCurveClip">
-                      <Path d="M0 0 H100 V100 H0 C20 76 20 24 0 0 Z" />
-                    </ClipPath>
-                  </Defs>
-                  <SvgImage
-                    href={{uri: banner.imageUrl}}
-                    width="100"
-                    height="100"
-                    preserveAspectRatio="xMidYMid slice"
-                    clipPath="url(#bannerImageCurveClip)"
-                  />
-                </Svg>
-              ) : (
+              {slides.map((slide, slideIndex) =>
+                slide.imageUrl ? (
+                  <Svg
+                    key={slide.id || `banner-image-${slideIndex}`}
+                    width="100%"
+                    height="100%"
+                    pointerEvents="none"
+                    style={[
+                      styles.bannerImage,
+                      {opacity: slideIndex === activeSlide ? 1 : 0},
+                    ]}
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="xMidYMid slice">
+                    <Defs>
+                      <ClipPath id={`bannerImageCurveClip-${slideIndex}`}>
+                        <Path d="M0 0 H100 V100 H0 C20 76 20 24 0 0 Z" />
+                      </ClipPath>
+                    </Defs>
+                    <SvgImage
+                      href={{uri: slide.imageUrl}}
+                      width="100"
+                      height="100"
+                      preserveAspectRatio="xMidYMid slice"
+                      clipPath={`url(#bannerImageCurveClip-${slideIndex})`}
+                    />
+                  </Svg>
+                ) : null,
+              )}
+              {!banner.imageUrl ? (
                 <Text style={styles.bannerImagePlaceholder}>
                   {banner.visual}
                 </Text>
-              )}
+              ) : null}
             </View>
             <Pressable
               accessibilityRole="button"
