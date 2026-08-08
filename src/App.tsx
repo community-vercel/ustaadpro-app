@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   GestureResponderEvent,
   Image,
   LayoutChangeEvent,
@@ -302,6 +303,7 @@ export default function App(): React.JSX.Element {
   const [detectedLocation, setDetectedLocation] =
     useState<SavedLocation | null>(null);
   const [locationPromptStarted, setLocationPromptStarted] = useState(false);
+  const locationRequestInFlight = useRef(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -459,12 +461,36 @@ export default function App(): React.JSX.Element {
   };
 
   const detectStartupLocation = async () => {
+    // The native CurrentLocation module only tracks one in-flight promise at
+    // a time - a second concurrent call (e.g. the auto-trigger effect firing
+    // again while an AppState-triggered retry is still pending) steals its
+    // resolve/reject callbacks and crashes the bridge with "no callback
+    // found ... already invoked".
+    if (locationRequestInFlight.current) {
+      return;
+    }
+    locationRequestInFlight.current = true;
     setLocating(true);
     setLocationError('');
     setLocationPermissionDenied(false);
+
+    // withTimeout only races the promise - it can't cancel the underlying
+    // native CLLocationManager request, which keeps running in the
+    // background after the JS side gives up on it. Only release the guard
+    // once that real request actually settles, otherwise a retry issued
+    // while it's still pending resets the native module's shared
+    // resolve/reject state out from under it and crashes the bridge when it
+    // eventually completes.
+    const locationPromise = locateCurrentAddress();
+    locationPromise
+      .finally(() => {
+        locationRequestInFlight.current = false;
+      })
+      .catch(() => undefined);
+
     try {
       const location = await withTimeout(
-        locateCurrentAddress(),
+        locationPromise,
         STARTUP_LOCATION_TIMEOUT_MS,
         'Location is taking too long. Please check GPS and try again, or skip for now.',
       );
@@ -482,18 +508,32 @@ export default function App(): React.JSX.Element {
         setLocationError(
           'Location access is turned off for this app. Enable it in Settings to detect your area automatically.',
         );
-        setLocationPromptStarted(false);
-        setLocating(false);
-        return;
+      } else {
+        setLocationError(
+          error?.message || 'Could not detect your current location.',
+        );
       }
-      setLocationError(
-        error?.message || 'Could not detect your current location.',
-      );
       setLocationPromptStarted(false);
     } finally {
       setLocating(false);
     }
   };
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      // If the user backgrounded the app to flip location on in Settings,
+      // re-check as soon as they come back instead of leaving them stuck on
+      // the "enable it in Settings" screen.
+      if (
+        nextState === 'active' &&
+        locationPromptVisible &&
+        locationPermissionDenied
+      ) {
+        void detectStartupLocation();
+      }
+    });
+    return () => subscription.remove();
+  }, [locationPermissionDenied, locationPromptVisible]);
 
   const selectPinnedLocation = async (coordinate: Coordinate) => {
     if (pinningLocation) {
@@ -566,7 +606,14 @@ export default function App(): React.JSX.Element {
         visible={locationPromptVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => void closeLocationPrompt()}
+        onRequestClose={() => {
+          // Apple guideline 5.1.1(iv): the user must always be taken to the
+          // native permission request after seeing this message - dismissing
+          // early (e.g. Android back button) must not skip it.
+          if (detectedLocation || locationError) {
+            void closeLocationPrompt();
+          }
+        }}
       >
         <View style={styles.locationOverlay}>
           <View style={styles.locationCard}>
@@ -605,12 +652,14 @@ export default function App(): React.JSX.Element {
             ) : null}
 
             <View style={styles.locationActions}>
-              <Pressable
-                style={styles.locationSecondaryButton}
-                onPress={() => void closeLocationPrompt()}
-              >
-                <Text style={styles.locationSecondaryText}>Not now</Text>
-              </Pressable>
+              {detectedLocation || locationError ? (
+                <Pressable
+                  style={styles.locationSecondaryButton}
+                  onPress={() => void closeLocationPrompt()}
+                >
+                  <Text style={styles.locationSecondaryText}>Maybe later</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 style={styles.locationPrimaryButton}
                 onPress={() => {

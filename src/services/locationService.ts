@@ -211,18 +211,43 @@ async function reverseGeocodeWithOpenStreetMap({
   return address as string;
 }
 
+// The native CurrentLocation module (iOS) only tracks a single in-flight
+// resolve/reject pair at a time - it has no per-call queueing. If two calls
+// overlap (e.g. a screen remount racing a background/foreground retry, or
+// two different screens both requesting location around the same time), the
+// second call silently steals the first call's native callbacks, and
+// whichever request settles late crashes the RN bridge with "no callback
+// found ... already invoked". Serializing every caller through one shared
+// in-flight promise, at the module level (not per-component), is the only
+// guard that reliably covers every caller.
+let inFlightLocationRequest: Promise<LocatedAddress> | null = null;
+
 export async function locateCurrentAddress(): Promise<LocatedAddress> {
-  const permissionGranted = await requestLocationPermission();
-
-  if (!permissionGranted) {
-    throw new Error('Location permission is required.');
+  if (inFlightLocationRequest) {
+    return inFlightLocationRequest;
   }
 
-  if (!CurrentLocation) {
-    throw new Error('Location service is not available in this app build.');
+  const request = (async () => {
+    const permissionGranted = await requestLocationPermission();
+
+    if (!permissionGranted) {
+      throw new Error('Location permission is required.');
+    }
+
+    if (!CurrentLocation) {
+      throw new Error('Location service is not available in this app build.');
+    }
+
+    const location = await CurrentLocation.getCurrentLocation();
+
+    return locatePinnedAddress(location);
+  })();
+
+  inFlightLocationRequest = request;
+
+  try {
+    return await request;
+  } finally {
+    inFlightLocationRequest = null;
   }
-
-  const location = await CurrentLocation.getCurrentLocation();
-
-  return locatePinnedAddress(location);
 }
