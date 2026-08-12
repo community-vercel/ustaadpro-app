@@ -41,6 +41,7 @@ import {formatPkr} from '@/utils/currency';
 import {NotificationCenter} from '@/components/NotificationCenter';
 import {resolveApiAssetUrl} from '@/api/client';
 import {playConfirmationCue} from '@/utils/confirmationCue';
+import {compressPaymentReceipt} from '@/utils/compressPaymentReceipt';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -426,27 +427,23 @@ export function BookingsTab(): React.JSX.Element {
 
     const result = await launchImageLibrary({
       mediaType: 'photo',
-      includeBase64: true,
-      quality: 0.8,
+      includeBase64: false,
+      selectionLimit: 1,
     });
 
     const asset = result.assets?.[0];
-    if (!asset?.base64) {
-      return;
-    }
-
-    const type = asset.type || 'image/jpeg';
-    const dataUrl = `data:${type};base64,${asset.base64}`;
+    if (!asset?.uri) return;
 
     try {
       setSubmittingReceipt(true);
+      const compressedReceipt = await compressPaymentReceipt(asset.uri);
       await uploadPaymentReceipt({
         orderId: paymentTarget.id,
-        dataUrl,
-        filename: asset.fileName || 'payment-receipt.jpg',
+        dataUrl: compressedReceipt.dataUrl,
+        filename: compressedReceipt.filename,
         amount: paymentAmountDue,
       });
-      setReceiptPreview(asset.uri || null);
+      setReceiptPreview(compressedReceipt.uri);
       await fetchOrders();
       await setPendingPaymentOrderId(null);
       const remainingPaymentJustCompleted = isRemainingBalancePayment;
