@@ -20,7 +20,12 @@ import { rounded } from '@/theme/layout';
 type Props = NativeStackScreenProps<RootStackParamList, 'Cart'>;
 
 export function CartScreen({ navigation }: Props): React.JSX.Element {
-  const {cart, appSettings, fetchAppContent, user, removeFromCart, updateCartQuantity} = useAppStore();
+  const cart = useAppStore(state => state.cart);
+  const appSettings = useAppStore(state => state.appSettings);
+  const fetchAppContent = useAppStore(state => state.fetchAppContent);
+  const user = useAppStore(state => state.user);
+  const removeFromCart = useAppStore(state => state.removeFromCart);
+  const updateCartQuantity = useAppStore(state => state.updateCartQuantity);
 
   useEffect(() => {
     fetchAppContent();

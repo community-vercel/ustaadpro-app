@@ -48,26 +48,24 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export function StoreTab(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const {
-    shopProducts,
-    shopCategories,
-    shopProductsLoading,
-    shopProductsHasMore,
-    shopProductsLoadingMore,
-    shopCart,
-    shopCartOpenRequestId,
-    appSettings,
-    user,
-    fetchShopProducts,
-    fetchShopOrders,
-    fetchAppContent,
-    addShopProductToCart,
-    removeShopProductFromCart,
-    updateShopCartQuantity,
-    checkoutShopCart,
-    savedShopLocation,
-    setSavedShopLocation,
-  } = useAppStore();
+  const shopProducts = useAppStore(state => state.shopProducts);
+  const shopCategories = useAppStore(state => state.shopCategories);
+  const shopProductsLoading = useAppStore(state => state.shopProductsLoading);
+  const shopProductsHasMore = useAppStore(state => state.shopProductsHasMore);
+  const shopProductsLoadingMore = useAppStore(state => state.shopProductsLoadingMore);
+  const shopCart = useAppStore(state => state.shopCart);
+  const shopCartOpenRequestId = useAppStore(state => state.shopCartOpenRequestId);
+  const appSettings = useAppStore(state => state.appSettings);
+  const user = useAppStore(state => state.user);
+  const fetchShopProducts = useAppStore(state => state.fetchShopProducts);
+  const fetchShopOrders = useAppStore(state => state.fetchShopOrders);
+  const fetchAppContent = useAppStore(state => state.fetchAppContent);
+  const addShopProductToCart = useAppStore(state => state.addShopProductToCart);
+  const removeShopProductFromCart = useAppStore(state => state.removeShopProductFromCart);
+  const updateShopCartQuantity = useAppStore(state => state.updateShopCartQuantity);
+  const checkoutShopCart = useAppStore(state => state.checkoutShopCart);
+  const savedShopLocation = useAppStore(state => state.savedShopLocation);
+  const setSavedShopLocation = useAppStore(state => state.setSavedShopLocation);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -155,8 +153,46 @@ export function StoreTab(): React.JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, activeCategory]);
 
-  // Products from store are already filtered by server; just use them directly
-  const filteredProducts = shopProducts;
+  // Keep category-specific results in their server order. In the default All
+  // view, distribute exposure fairly with one product per category per round.
+  const filteredProducts = useMemo(() => {
+    if (activeCategory !== 'All' || shopProducts.length < 2) {
+      return shopProducts;
+    }
+
+    const productsByCategory = new Map<string, ShopProduct[]>();
+    shopProducts.forEach(product => {
+      const category = product.category || 'General';
+      const categoryProducts = productsByCategory.get(category) || [];
+      categoryProducts.push(product);
+      productsByCategory.set(category, categoryProducts);
+    });
+
+    const configuredOrder = shopCategories
+      .map(category => category.name)
+      .filter(category => productsByCategory.has(category));
+    const remainingCategories = [...productsByCategory.keys()].filter(
+      category => !configuredOrder.includes(category),
+    );
+    const categoryOrder = [...configuredOrder, ...remainingCategories];
+    const interleaved: ShopProduct[] = [];
+    let productIndex = 0;
+    let addedInRound = true;
+
+    while (addedInRound) {
+      addedInRound = false;
+      categoryOrder.forEach(category => {
+        const product = productsByCategory.get(category)?.[productIndex];
+        if (product) {
+          interleaved.push(product);
+          addedInRound = true;
+        }
+      });
+      productIndex += 1;
+    }
+
+    return interleaved;
+  }, [activeCategory, shopCategories, shopProducts]);
 
   const cartCount = useMemo(
     () => shopCart.reduce((sum, item) => sum + item.quantity, 0),

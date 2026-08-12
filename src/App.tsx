@@ -35,6 +35,7 @@ import { ComplaintsScreen } from '@/screens/main/ComplaintsScreen';
 import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme/colors';
 import { pushNotificationService } from '@/services/PushNotificationService';
+import {apiClient} from '@/api/client';
 import { InAppNotificationBanner } from '@/components/InAppNotificationBanner';
 import {
   locateCurrentAddress,
@@ -304,6 +305,8 @@ export default function App(): React.JSX.Element {
     useState<SavedLocation | null>(null);
   const [locationPromptStarted, setLocationPromptStarted] = useState(false);
   const locationRequestInFlight = useRef(false);
+  const paymentStatusFingerprint = useRef('');
+  const paymentStatusRequestInFlight = useRef(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -341,36 +344,39 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     if (booting || !isAuthenticated) {
+      paymentStatusFingerprint.current = '';
       return undefined;
     }
 
     const refreshPaymentStatus = async () => {
-      await fetchOrders();
-      const freshOrders = useAppStore.getState().orders;
-      const outstandingOrder = freshOrders.find(order => {
-        if (
-          order.status !== 'completed' ||
-          order.paymentMethod !== 'Rs 200 Advance'
-        ) {
-          return false;
+      if (paymentStatusRequestInFlight.current) return;
+      paymentStatusRequestInFlight.current = true;
+      try {
+        const response = await apiClient.get('/orders/statuses');
+        const statuses = Array.isArray(response.data) ? response.data : [];
+        const fingerprint = JSON.stringify(statuses);
+        if (fingerprint !== paymentStatusFingerprint.current) {
+          paymentStatusFingerprint.current = fingerprint;
+          await fetchOrders();
         }
-        const validReceipts = (order.paymentReceipts || []).filter(
-          receipt => receipt.status !== 'rejected',
-        );
-        const hasAdvance = validReceipts.some(
-          receipt => receipt.paymentStage === 'advance',
-        );
-        const hasRemaining = validReceipts.some(
-          receipt => receipt.paymentStage === 'remaining',
-        );
-        return hasAdvance && !hasRemaining;
-      });
 
-      if (
-        outstandingOrder &&
-        useAppStore.getState().pendingPaymentOrderId !== outstandingOrder.id
-      ) {
-        await setPendingPaymentOrderId(outstandingOrder.id);
+        const outstandingOrder = statuses.find(
+          (order: any) =>
+            order.status === 'completed' &&
+            order.paymentMethod === 'Rs 200 Advance' &&
+            order.hasAdvance &&
+            !order.hasRemaining,
+        );
+        if (
+          outstandingOrder &&
+          useAppStore.getState().pendingPaymentOrderId !== outstandingOrder.id
+        ) {
+          await setPendingPaymentOrderId(outstandingOrder.id);
+        }
+      } catch (error) {
+        console.error('Refresh payment status error:', error);
+      } finally {
+        paymentStatusRequestInFlight.current = false;
       }
     };
 

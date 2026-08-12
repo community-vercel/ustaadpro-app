@@ -57,7 +57,9 @@ const statusMeta: Record<
 };
 
 export function ShoppingOrdersScreen({navigation}: Props): React.JSX.Element {
-  const {shopOrders, fetchShopOrders, cancelShopOrder} = useAppStore();
+  const shopOrders = useAppStore(state => state.shopOrders);
+  const fetchShopOrders = useAppStore(state => state.fetchShopOrders);
+  const cancelShopOrder = useAppStore(state => state.cancelShopOrder);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   

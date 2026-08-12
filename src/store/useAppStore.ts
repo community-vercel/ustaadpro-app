@@ -27,6 +27,9 @@ const SHOP_LOCATION_KEY = 'saved_shop_location';
 const PENDING_PAYMENT_ORDER_ID_KEY = 'pending_service_payment_order_id';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
+let ordersRequest: Promise<void> | null = null;
+let lastOrdersFingerprint = '';
+
 const LEGACY_CATEGORY_ALIASES: Record<string, {id: string; title: string} | null> = {
   'ac-services': {id: 'hvac', title: 'HVAC'},
   hvac: {id: 'hvac', title: 'HVAC'},
@@ -688,52 +691,69 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchOrders: async () => {
     if (!get().user) {
+      lastOrdersFingerprint = '';
       set({orders: []});
       return;
     }
+    if (ordersRequest) {
+      return ordersRequest;
+    }
 
-    try {
-      const response = await apiClient.get('/orders');
-      const orders = (Array.isArray(response.data) ? response.data : []).map(
-        (order: any) => ({
-          ...order,
-          paymentReceipt: order.paymentReceipt
-            ? {
-                ...order.paymentReceipt,
+    const request = (async () => {
+      try {
+        const response = await apiClient.get('/orders');
+        const orders = (Array.isArray(response.data) ? response.data : []).map(
+          (order: any) => ({
+            ...order,
+            paymentReceipt: order.paymentReceipt
+              ? {
+                  ...order.paymentReceipt,
+                  receiptUrl: String(
+                    order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                  ).startsWith('data:image/')
+                    ? resolveApiAssetUrl(
+                        `/api/orders/${encodeURIComponent(order.id)}/receipts/${order.paymentReceipt.id}/image`,
+                      )
+                    : resolveApiAssetUrl(
+                        order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                      ),
+                }
+              : null,
+            paymentReceipts: (order.paymentReceipts || order.payment_receipts || []).map(
+              (receipt: any) => ({
+                ...receipt,
                 receiptUrl: String(
-                  order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                  receipt.receiptUrl || receipt.receipt_url || '',
                 ).startsWith('data:image/')
                   ? resolveApiAssetUrl(
-                      `/api/orders/${encodeURIComponent(order.id)}/receipts/${order.paymentReceipt.id}/image`,
+                      `/api/orders/${encodeURIComponent(order.id)}/receipts/${receipt.id}/image`,
                     )
                   : resolveApiAssetUrl(
-                      order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                      receipt.receiptUrl || receipt.receipt_url || '',
                     ),
-              }
-            : null,
-          paymentReceipts: (order.paymentReceipts || order.payment_receipts || []).map(
-            (receipt: any) => ({
-              ...receipt,
-              receiptUrl: String(
-                receipt.receiptUrl || receipt.receipt_url || '',
-              ).startsWith('data:image/')
-                ? resolveApiAssetUrl(
-                    `/api/orders/${encodeURIComponent(order.id)}/receipts/${receipt.id}/image`,
-                  )
-                : resolveApiAssetUrl(
-                    receipt.receiptUrl || receipt.receipt_url || '',
-                  ),
-            }),
-          ),
-        }),
-      );
-      set({orders});
-      await refreshProfileState(set);
-    } catch (error) {
-      console.error('Fetch orders error:', error);
+              }),
+            ),
+          }),
+        );
+        const userId = get().user?.email || get().user?.phone || 'anonymous';
+        const fingerprint = `${userId}:${JSON.stringify(orders)}`;
+        if (fingerprint !== lastOrdersFingerprint) {
+          lastOrdersFingerprint = fingerprint;
+          set({orders});
+          void refreshProfileState(set);
+        }
+      } catch (error) {
+        console.error('Fetch orders error:', error);
+      }
+    })();
+
+    ordersRequest = request;
+    try {
+      await request;
+    } finally {
+      if (ordersRequest === request) ordersRequest = null;
     }
   },
-
   fetchShopProducts: async (options = {}) => {
     const pageSize = 15;
     const {reset = false, category = 'All', search = ''} = options;

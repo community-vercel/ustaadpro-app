@@ -323,22 +323,20 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   const [message, setMessage] = useState<MessageState | null>(null);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const {
-    addToCart,
-    cart,
-    checkout,
-    addresses,
-    fetchAddresses,
-    addAddress,
-    services,
-    fetchServices,
-    appSettings,
-    fetchAppContent,
-    user,
-    savedServiceLocation,
-    setPendingPaymentOrderId,
-    setSavedServiceLocation,
-  } = useAppStore();
+  const addToCart = useAppStore(state => state.addToCart);
+  const cart = useAppStore(state => state.cart);
+  const checkout = useAppStore(state => state.checkout);
+  const addresses = useAppStore(state => state.addresses);
+  const fetchAddresses = useAppStore(state => state.fetchAddresses);
+  const addAddress = useAppStore(state => state.addAddress);
+  const services = useAppStore(state => state.services);
+  const fetchServices = useAppStore(state => state.fetchServices);
+  const appSettings = useAppStore(state => state.appSettings);
+  const fetchAppContent = useAppStore(state => state.fetchAppContent);
+  const user = useAppStore(state => state.user);
+  const savedServiceLocation = useAppStore(state => state.savedServiceLocation);
+  const setPendingPaymentOrderId = useAppStore(state => state.setPendingPaymentOrderId);
+  const setSavedServiceLocation = useAppStore(state => state.setSavedServiceLocation);
   const service = services.find(s => s.id === route.params.serviceId);
   const bookingDays = getBookingDays();
 

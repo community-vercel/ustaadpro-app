@@ -51,7 +51,7 @@ import {colors} from '@/theme/colors';
 import {fontFamily} from '@/theme/typography';
 import {formatPkr} from '@/utils/currency';
 import {rounded} from '@/theme/layout';
-import {HomeSlide, ServiceCategory, ServiceCategoryId} from '@/types/models';
+import {HomeSlide, ServiceCategory, ServiceCategoryId, ServiceItem} from '@/types/models';
 import {NotificationCenter} from '@/components/NotificationCenter';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -170,19 +170,17 @@ function categoryIcon(category: ServiceCategory) {
 
 export function HomeTab(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
-  const {
-    user,
-    isGuest,
-    services,
-    categories,
-    subcategories,
-    homeSlides,
-    fetchServices,
-    fetchAppContent,
-    logout,
-    savedServiceLocation,
-    setLocationPromptVisible,
-  } = useAppStore();
+  const user = useAppStore(state => state.user);
+  const isGuest = useAppStore(state => state.isGuest);
+  const services = useAppStore(state => state.services);
+  const categories = useAppStore(state => state.categories);
+  const subcategories = useAppStore(state => state.subcategories);
+  const homeSlides = useAppStore(state => state.homeSlides);
+  const fetchServices = useAppStore(state => state.fetchServices);
+  const fetchAppContent = useAppStore(state => state.fetchAppContent);
+  const logout = useAppStore(state => state.logout);
+  const savedServiceLocation = useAppStore(state => state.savedServiceLocation);
+  const setLocationPromptVisible = useAppStore(state => state.setLocationPromptVisible);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -205,22 +203,38 @@ export function HomeTab(): React.JSX.Element {
   const banner = slides[activeSlide] || slides[0];
   // Main categories are managed from the admin catalogue. An empty catalogue
   // must stay empty instead of falling back to demo categories.
-  const instantServices = categories.map(category => ({
-    id: category.id,
-    label: category.title,
-    Icon: categoryIcon(category),
-    color: category.tint || '#006c49',
-    imageUrl: category.mobileIconUrl || category.imageUrl || '',
-  }));
-  const quickServices = useMemo(() =>
-    subcategories
+  const categoryById = useMemo(
+    () => new Map(categories.map(category => [category.id, category])),
+    [categories],
+  );
+  const servicesBySubcategory = useMemo(() => {
+    const grouped = new Map<string, ServiceItem[]>();
+    services.forEach(service => {
+      if (!service.subcategoryId) return;
+      const group = grouped.get(service.subcategoryId) || [];
+      group.push(service);
+      grouped.set(service.subcategoryId, group);
+    });
+    return grouped;
+  }, [services]);
+  const instantServices = useMemo(
+    () => categories.map(category => ({
+      id: category.id,
+      label: category.title,
+      Icon: categoryIcon(category),
+      color: category.tint || '#006c49',
+      imageUrl: category.mobileIconUrl || category.imageUrl || '',
+    })),
+    [categories],
+  );
+  const quickServices = useMemo(
+    () => subcategories
       .map(subcategory => {
-        const category = categories.find(item => item.id === subcategory.categoryId);
-        const firstService = services.find(item => item.subcategoryId === subcategory.id);
-        return {id: subcategory.id, title: subcategory.title, categoryTitle: category?.title || 'Home Services', imageUrl: subcategory.mobileIconUrl || subcategory.webImageUrl || subcategory.imageUrl || firstService?.imageUrl || '', serviceCount: services.filter(item => item.subcategoryId === subcategory.id).length};
+        const matchingServices = servicesBySubcategory.get(subcategory.id) || [];
+        return {id: subcategory.id, title: subcategory.title, categoryTitle: categoryById.get(subcategory.categoryId)?.title || 'Home Services', imageUrl: subcategory.mobileIconUrl || subcategory.webImageUrl || subcategory.imageUrl || matchingServices[0]?.imageUrl || '', serviceCount: matchingServices.length};
       })
       .filter(item => item.serviceCount > 0),
-    [categories, services, subcategories],
+    [categoryById, servicesBySubcategory, subcategories],
   );
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -258,7 +272,7 @@ export function HomeTab(): React.JSX.Element {
         return true;
       }
 
-      const category = categories.find(item => item.id === service.categoryId);
+      const category = categoryById.get(service.categoryId);
       const haystack = [
         service.title,
         service.description,
@@ -291,7 +305,7 @@ export function HomeTab(): React.JSX.Element {
       }
       return 0;
     });
-  }, [categories, normalizedSearch, selectedCategoryId, services, sortOption]);
+  }, [categories, categoryById, normalizedSearch, selectedCategoryId, services, sortOption]);
   const activeFilterCount =
     (selectedCategoryId !== 'all' ? 1 : 0) + (sortOption !== 'default' ? 1 : 0);
 
@@ -344,6 +358,7 @@ export function HomeTab(): React.JSX.Element {
         Icon: FileText,
         onPress: () => navigation.navigate('PrivacyPolicy'),
       },
+
       user
         ? {
             label: 'Sign out',

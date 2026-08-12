@@ -56,7 +56,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export function ComplaintsScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { user } = useAppStore();
+  const user = useAppStore(state => state.user);
 
   const [loading, setLoading] = useState(false);
   const [complaints, setComplaints] = useState<Complaint[]>([]);

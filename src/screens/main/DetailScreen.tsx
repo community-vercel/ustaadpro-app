@@ -39,15 +39,13 @@ import {ServiceReview} from '@/types/models';
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 
 export function DetailScreen({navigation, route}: Props): React.JSX.Element {
-  const {
-    appSettings,
-    services,
-    fetchAppContent,
-    fetchServices,
-    fetchServiceReviews,
-    user,
-    addToCart,
-  } = useAppStore();
+  const appSettings = useAppStore(state => state.appSettings);
+  const services = useAppStore(state => state.services);
+  const fetchAppContent = useAppStore(state => state.fetchAppContent);
+  const fetchServices = useAppStore(state => state.fetchServices);
+  const fetchServiceReviews = useAppStore(state => state.fetchServiceReviews);
+  const user = useAppStore(state => state.user);
+  const addToCart = useAppStore(state => state.addToCart);
   const service = services.find(item => item.id === route.params.serviceId);
   const [selectedWorkIds, setSelectedWorkIds] = useState<number[]>(
     route.params.selectedWorkId !== undefined ? [route.params.selectedWorkId] : [0]

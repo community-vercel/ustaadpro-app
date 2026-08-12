@@ -81,17 +81,15 @@ function profilePhotoKey(user?: {email?: string; phone?: string} | null) {
 
 export function ProfileTab(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
-  const {
-    user,
-    orders,
-    addresses,
-    fetchOrders,
-    fetchAddresses,
-    fetchAppContent,
-    appSettings,
-    updateAddress,
-    logout,
-  } = useAppStore();
+  const user = useAppStore(state => state.user);
+  const orders = useAppStore(state => state.orders);
+  const addresses = useAppStore(state => state.addresses);
+  const fetchOrders = useAppStore(state => state.fetchOrders);
+  const fetchAddresses = useAppStore(state => state.fetchAddresses);
+  const fetchAppContent = useAppStore(state => state.fetchAppContent);
+  const appSettings = useAppStore(state => state.appSettings);
+  const updateAddress = useAppStore(state => state.updateAddress);
+  const logout = useAppStore(state => state.logout);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAllBookings, setShowAllBookings] = useState(false);

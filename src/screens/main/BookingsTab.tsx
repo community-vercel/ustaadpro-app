@@ -139,7 +139,10 @@ function parseSchedule(
 
 export function BookingsTab(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
-  const {orders, services, fetchOrders, fetchServices} = useAppStore();
+  const orders = useAppStore(state => state.orders);
+  const services = useAppStore(state => state.services);
+  const fetchOrders = useAppStore(state => state.fetchOrders);
+  const fetchServices = useAppStore(state => state.fetchServices);
   const submitServiceReview = useAppStore(state => state.submitServiceReview);
   const updateServiceOrder = useAppStore(state => state.updateServiceOrder);
   const cancelServiceOrder = useAppStore(state => state.cancelServiceOrder);
@@ -241,10 +244,6 @@ export function BookingsTab(): React.JSX.Element {
   useFocusEffect(
     useCallback(() => {
       void fetchOrders();
-      const refreshTimer = setInterval(() => {
-        void fetchOrders();
-      }, 4000);
-      return () => clearInterval(refreshTimer);
     }, [fetchOrders]),
   );
 
@@ -1030,7 +1029,15 @@ export function BookingsTab(): React.JSX.Element {
             {!isCashPayment(paymentTarget?.paymentMethod) && visibleReceiptUrl ? (
               <View style={styles.uploadedReceiptBox}>
                 <Text style={styles.uploadedReceiptLabel}>{isRemainingBalancePayment ? 'Advance receipt already submitted' : 'Uploaded receipt'}</Text>
-                <Image source={{uri: visibleReceiptUrl}} style={styles.receiptPreview} />
+                <Image
+                  source={{
+                    uri: visibleReceiptUrl,
+                    headers: receiptAuthToken
+                      ? {Authorization: `Bearer ${receiptAuthToken}`}
+                      : undefined,
+                  }}
+                  style={styles.receiptPreview}
+                />
                 <Text style={styles.uploadedReceiptHint}>{isRemainingBalancePayment ? 'Advance payment is recorded. Upload the remaining balance receipt below.' : 'Receipt already submitted. Use Reupload only if you need to replace it.'}</Text>
               </View>
             ) : null}

@@ -34,7 +34,10 @@ type FlatServiceItem = {
 };
 
 export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
-  const {services, categories, subcategories, fetchServices} = useAppStore();
+  const services = useAppStore(state => state.services);
+  const categories = useAppStore(state => state.categories);
+  const subcategories = useAppStore(state => state.subcategories);
+  const fetchServices = useAppStore(state => state.fetchServices);
   const isAllCategories = route.params.categoryId === 'all';
   const isAllSubcategories = route.params.categoryId === 'all-subcategories';
   const isMainService = !isAllCategories && !isAllSubcategories && !route.params.showServices;
