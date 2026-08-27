@@ -687,7 +687,7 @@ export default function App(): React.JSX.Element {
                       ? 'Save location'
                       : locationPermissionDenied
                         ? 'Open Settings'
-                        : 'Detect location'}
+                        : 'Continue'}
                   </Text>
                 )}
               </Pressable>
