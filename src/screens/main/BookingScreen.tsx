@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Alert,
   Image,
@@ -12,8 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -31,15 +31,15 @@ import {
 } from 'lucide-react-native';
 
 const easypaisaLogo = require('../../assets/images/easypaisa.png');
-import { RootStackParamList } from '@/navigation/types';
-import { useAppStore } from '@/store/useAppStore';
-import { fontFamily } from '@/theme/typography';
-import { formatPkr } from '@/utils/currency';
-import { rounded } from '@/theme/layout';
-import { playConfirmationCue } from '@/utils/confirmationCue';
-import { locateCurrentAddress } from '@/services/locationService';
-import { SavedLocation } from '@/types/models';
-import { colors } from '@/theme/colors';
+import {RootStackParamList} from '@/navigation/types';
+import {useAppStore} from '@/store/useAppStore';
+import {fontFamily} from '@/theme/typography';
+import {formatPkr} from '@/utils/currency';
+import {rounded} from '@/theme/layout';
+import {playConfirmationCue} from '@/utils/confirmationCue';
+import {locateCurrentAddress} from '@/services/locationService';
+import {SavedLocation} from '@/types/models';
+import {colors} from '@/theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
 
@@ -69,7 +69,7 @@ function getBookingDays() {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
 
-  return Array.from({ length: 90 }, (_, index) => {
+  return Array.from({length: 90}, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() + index);
     date.setHours(12, 0, 0, 0);
@@ -150,10 +150,15 @@ function timeToMinutes(time: string): number {
   return to24Hour(hour, period) * 60 + Number(minute || 0);
 }
 
-function isBeforeBookingLeadTime(time: string, selectedDay: number, minimumLeadHours: number): boolean {
+function isBeforeBookingLeadTime(
+  time: string,
+  selectedDay: number,
+  minimumLeadHours: number,
+): boolean {
   if (selectedDay !== 0) return false;
   const now = new Date();
-  const earliestMinutes = now.getHours() * 60 + now.getMinutes() + minimumLeadHours * 60;
+  const earliestMinutes =
+    now.getHours() * 60 + now.getMinutes() + minimumLeadHours * 60;
   return timeToMinutes(time) < earliestMinutes;
 }
 function parseTime(time: string): {
@@ -164,7 +169,7 @@ function parseTime(time: string): {
   const [clock, period] = time.split(' ');
   const [hour, minute] = clock.split(':');
 
-  return { hour, minute, period };
+  return {hour, minute, period};
 }
 
 const PAYMENT_METHODS = [
@@ -181,7 +186,8 @@ const PAYMENT_METHODS = [
   {
     id: 'Rs 200 Advance',
     label: 'Book with Rs 200',
-    description: 'Pay Rs 200 now via Easypaisa, and pay the remaining balance after service completion.',
+    description:
+      'Pay Rs 200 now via Easypaisa, and pay the remaining balance after service completion.',
     Icon: Banknote,
     image: easypaisaLogo,
     color: '#16a34a',
@@ -191,7 +197,8 @@ const PAYMENT_METHODS = [
   {
     id: 'Full Payment in Advance',
     label: 'Book with Full Payment',
-    description: 'Pay the full amount now via Easypaisa to receive an exclusive 5% discount.',
+    description:
+      'Pay the full amount now via Easypaisa to receive an exclusive 5% discount.',
     Icon: Banknote,
     image: easypaisaLogo,
     color: '#1d4ed8',
@@ -229,8 +236,8 @@ function normalizeTileX(tileX: number) {
   return ((tileX % MAX_TILE_INDEX) + MAX_TILE_INDEX) % MAX_TILE_INDEX;
 }
 
-function CurrentLocationMapPreview({ location }: { location: Coordinate }) {
-  const [mapSize, setMapSize] = useState<MapSize>({ width: 0, height: 0 });
+function CurrentLocationMapPreview({location}: {location: Coordinate}) {
+  const [mapSize, setMapSize] = useState<MapSize>({width: 0, height: 0});
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const centerTileX = lonToTileX(location.longitude);
   const centerTileY = latToTileY(location.latitude);
@@ -239,8 +246,8 @@ function CurrentLocationMapPreview({ location }: { location: Coordinate }) {
   const tileOffsets = [-1, 0, 1];
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
-    setMapSize({ width, height });
+    const {width, height} = event.nativeEvent.layout;
+    setMapSize({width, height});
   };
 
   return (
@@ -294,7 +301,7 @@ function CurrentLocationMapPreview({ location }: { location: Coordinate }) {
   );
 }
 
-export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
+export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   const [selectedDay, setSelectedDay] = useState(0);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringEndDay, setRecurringEndDay] = useState(7);
@@ -311,6 +318,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   const [addressLabel, setAddressLabel] = useState('');
   const [addressDetail, setAddressDetail] = useState('');
   const [locatingAddress, setLocatingAddress] = useState(false);
+  const [locationFailure, setLocationFailure] = useState('');
   const [selectedPayment, setSelectedPayment] = useState('Rs 200 Advance');
   const [useRewardPoints, setUseRewardPoints] = useState(false);
   const [useWalletBalance, setUseWalletBalance] = useState(false);
@@ -335,14 +343,28 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   const fetchAppContent = useAppStore(state => state.fetchAppContent);
   const user = useAppStore(state => state.user);
   const savedServiceLocation = useAppStore(state => state.savedServiceLocation);
-  const setPendingPaymentOrderId = useAppStore(state => state.setPendingPaymentOrderId);
-  const setSavedServiceLocation = useAppStore(state => state.setSavedServiceLocation);
+  const setPendingPaymentOrderId = useAppStore(
+    state => state.setPendingPaymentOrderId,
+  );
+  const setSavedServiceLocation = useAppStore(
+    state => state.setSavedServiceLocation,
+  );
+  const setLocationPromptVisible = useAppStore(
+    state => state.setLocationPromptVisible,
+  );
   const service = services.find(s => s.id === route.params.serviceId);
   const bookingDays = getBookingDays();
 
   useEffect(() => {
     fetchAddresses();
   }, [fetchAddresses]);
+
+  useEffect(() => {
+    // Review & Booking owns its address flow. Keeping the global automatic
+    // location modal open here can overlap the native GPS request and leave
+    // the booking ScrollView hidden behind a transparent modal.
+    setLocationPromptVisible(false);
+  }, [setLocationPromptVisible]);
 
   useEffect(() => {
     if (!services.length) {
@@ -367,9 +389,16 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   }, [selectedTime]);
 
   useEffect(() => {
-    const minimumLeadHours = Math.max(0, Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)));
+    const minimumLeadHours = Math.max(
+      0,
+      Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)),
+    );
     if (isBeforeBookingLeadTime(selectedTime, selectedDay, minimumLeadHours)) {
-      const nextSlot = QUICK_TIME_SLOTS.find(slot => !isClosedTime(slot) && !isBeforeBookingLeadTime(slot, selectedDay, minimumLeadHours));
+      const nextSlot = QUICK_TIME_SLOTS.find(
+        slot =>
+          !isClosedTime(slot) &&
+          !isBeforeBookingLeadTime(slot, selectedDay, minimumLeadHours),
+      );
       if (nextSlot) {
         const parsed = parseTime(nextSlot);
         setSelectedTime(nextSlot);
@@ -409,7 +438,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   if (!service) {
     return (
       <SafeAreaView style={styles.safe}>
-        <Text style={{ color: '#0b1c30', padding: 24 }}>
+        <Text style={{color: '#0b1c30', padding: 24}}>
           {services.length ? 'Service not found.' : 'Loading service...'}
         </Text>
       </SafeAreaView>
@@ -419,7 +448,10 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   const inspectionFee = Number(appSettings.inspectionFee || 0);
   const rewardEnabled = appSettings.rewardEnabled !== false;
   const rewardPoints = Number(user?.rewardPoints || 0);
-  const rewardPointValue = Math.max(1, Number(appSettings.rewardPointValue || 25));
+  const rewardPointValue = Math.max(
+    1,
+    Number(appSettings.rewardPointValue || 25),
+  );
   const rewardMinimumRedeem = Math.max(
     0,
     Number(appSettings.rewardMinimumRedeem || 100),
@@ -439,34 +471,40 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
     : 1;
   const selectedWorkPrices = route.params.specificWorkPriceIds?.length
     ? service.workPrices?.filter(work =>
-      route.params.specificWorkPriceIds!.map(Number).includes(Number(work.id)),
-    ) || []
+        route.params
+          .specificWorkPriceIds!.map(Number)
+          .includes(Number(work.id)),
+      ) || []
     : route.params.specificWorkPriceId
       ? service.workPrices?.filter(
-        work => Number(work.id) === Number(route.params.specificWorkPriceId),
-      ) || []
-      : service.workPrices?.[0] ? [service.workPrices[0]] : [];
+          work => Number(work.id) === Number(route.params.specificWorkPriceId),
+        ) || []
+      : service.workPrices?.[0]
+        ? [service.workPrices[0]]
+        : [];
 
   const bookingWorkPrices = selectedWorkPrices.length
     ? selectedWorkPrices
     : [
-      {
-        id: route.params.specificWorkPriceId || 0,
-        title: route.params.specificWorkTitle || service.title,
-        description: '',
-        price: Number(route.params.specificWorkPrice || service.price),
-      },
-    ];
+        {
+          id: route.params.specificWorkPriceId || 0,
+          title: route.params.specificWorkTitle || service.title,
+          description: '',
+          price: Number(route.params.specificWorkPrice || service.price),
+        },
+      ];
 
-  const serviceUnitPrice = bookingWorkPrices.reduce(
-    (sum, work) => sum + Number(work.price || 0),
-    0,
-  ) || Number(service.price);
+  const serviceUnitPrice =
+    bookingWorkPrices.reduce((sum, work) => sum + Number(work.price || 0), 0) ||
+    Number(service.price);
   const cartUnitSubtotal = cart.reduce(
-    (sum, item) => sum + Number(item.service.price || 0) * Number(item.quantity || 0),
+    (sum, item) =>
+      sum + Number(item.service.price || 0) * Number(item.quantity || 0),
     0,
   );
-  const serviceSubtotal = (route.params.fromCart ? cartUnitSubtotal : serviceUnitPrice) * recurringOccurrences;
+  const serviceSubtotal =
+    (route.params.fromCart ? cartUnitSubtotal : serviceUnitPrice) *
+    recurringOccurrences;
   const maxRewardDiscount = Math.floor(
     (serviceSubtotal * serviceRewardMaxDiscountPercent) / 100,
   );
@@ -478,28 +516,52 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
     canRedeemReward && redeemableRewardValue >= rewardMinimumRedeem;
   const rewardDiscount =
     useRewardPoints && canRedeemRewardForBooking ? redeemableRewardValue : 0;
-  const selectedPaymentMethod = PAYMENT_METHODS.find(m => m.id === selectedPayment);
-  const fullAdvanceDiscount = selectedPaymentMethod?.discount === 5
-    ? Math.round((serviceSubtotal - rewardDiscount) * 0.05)
-    : 0;
-  const taxableSubtotal = Math.max(0, serviceSubtotal - rewardDiscount - fullAdvanceDiscount);
+  const selectedPaymentMethod = PAYMENT_METHODS.find(
+    m => m.id === selectedPayment,
+  );
+  const fullAdvanceDiscount =
+    selectedPaymentMethod?.discount === 5
+      ? Math.round((serviceSubtotal - rewardDiscount) * 0.05)
+      : 0;
+  const taxableSubtotal = Math.max(
+    0,
+    serviceSubtotal - rewardDiscount - fullAdvanceDiscount,
+  );
   const tax = Math.round(
     (taxableSubtotal * Number(appSettings.serviceTaxPercent || 0)) / 100,
   );
   const total = taxableSubtotal + inspectionFee + tax;
   const walletBalance = Math.max(0, Number(user?.walletBalance || 0));
-  const walletAdjustment = useWalletBalance ? Math.min(walletBalance, total) : 0;
+  const walletAdjustment = useWalletBalance
+    ? Math.min(walletBalance, total)
+    : 0;
   const amountToPay = Math.max(0, total - walletAdjustment);
   const selectedTimeClosed = isClosedTime(selectedTime);
-  const minimumBookingLeadHours = Math.max(0, Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)));
-  const selectedTimeTooSoon = isBeforeBookingLeadTime(selectedTime, selectedDay, minimumBookingLeadHours);
+  const minimumBookingLeadHours = Math.max(
+    0,
+    Math.min(168, Number(appSettings.minimumBookingLeadHours || 0)),
+  );
+  const selectedTimeTooSoon = isBeforeBookingLeadTime(
+    selectedTime,
+    selectedDay,
+    minimumBookingLeadHours,
+  );
   const selectedTimeUnavailable = selectedTimeClosed || selectedTimeTooSoon;
-  const noTimeAvailableToday = selectedDay === 0 && isBeforeBookingLeadTime('10:45 PM', 0, minimumBookingLeadHours);
+  const noTimeAvailableToday =
+    selectedDay === 0 &&
+    isBeforeBookingLeadTime('10:45 PM', 0, minimumBookingLeadHours);
   const selectedBookingDay = bookingDays[selectedDay] || bookingDays[0];
   const recurringEndBookingDay =
     bookingDays[recurringEndDay] || bookingDays[selectedDay] || bookingDays[0];
   const selectedWorkTitle = route.params.fromCart
-    ? cart.map(item => String(item.quantity) + 'x ' + (item.service.selectedWorkTitle || item.service.title)).join(', ')
+    ? cart
+        .map(
+          item =>
+            String(item.quantity) +
+            'x ' +
+            (item.service.selectedWorkTitle || item.service.title),
+        )
+        .join(', ')
     : bookingWorkPrices.map(work => work.title).join(', ') || service.title;
   const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
   const serviceLocationAddress = selectedAddress
@@ -543,7 +605,9 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
       return false;
     }
 
-    if (isBeforeBookingLeadTime(nextTime, selectedDay, minimumBookingLeadHours)) {
+    if (
+      isBeforeBookingLeadTime(nextTime, selectedDay, minimumBookingLeadHours)
+    ) {
       showMessage({
         title: 'Time not available yet',
         body: `Currently our Workers are busy`,
@@ -585,6 +649,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
         detail: addressDetail.trim(),
       });
       setSelectedAddressId(saved.id);
+      setLocationFailure('');
       setAddressLabel('');
       setAddressDetail('');
       setShowAddressForm(false);
@@ -604,7 +669,11 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
   };
 
   const handleLocateAddress = async () => {
+    if (locatingAddress) {
+      return;
+    }
     setLocatingAddress(true);
+    setLocationFailure('');
     try {
       const currentAddress = await locateCurrentAddress();
       const location: SavedLocation = {
@@ -615,6 +684,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
         updatedAt: new Date().toISOString(),
       };
       await saveLocatedServiceAddress(location);
+      setLocationFailure('');
       setAddressLabel(current => current || 'Current Location');
       setAddressDetail(currentAddress.address);
       showMessage({
@@ -624,10 +694,12 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
           : 'Your current location is ready for service booking.',
         tone: currentAddress.isCoordinateFallback ? 'warning' : 'warning',
       });
-    } catch (error: any) {
+    } catch {
+      const failureMessage = 'Please enter your service address manually.';
+      setLocationFailure(failureMessage);
       showMessage({
         title: 'Location unavailable',
-        body: error?.message || 'Could not detect your current location.',
+        body: failureMessage,
         tone: 'error',
       });
     } finally {
@@ -641,10 +713,10 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
         'Login required',
         'Please login or create an account to place a service booking.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          {text: 'Cancel', style: 'cancel'},
           {
             text: 'Login',
-            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+            onPress: () => navigation.navigate('Auth', {screen: 'Login'}),
           },
         ],
       );
@@ -652,6 +724,11 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
     }
 
     if ((!selectedAddressId && !savedServiceLocation) || !selectedPayment) {
+      if (!selectedAddressId && !savedServiceLocation) {
+        setLocationFailure(
+          'Please enter your service address manually.',
+        );
+      }
       showMessage({
         title: 'Missing details',
         body: 'Please select or detect a service address and payment method before confirming.',
@@ -712,16 +789,18 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
     try {
       setConfirming(true);
       setDetailsConfirmVisible(false);
-      if (!route.params.fromCart) bookingWorkPrices.forEach(work => {
-        addToCart({
-          ...service,
-          price: Number(work.price || service.price),
-          selectedWorkPrice: work,
-          selectedWorkPriceId: work.id || undefined,
-          selectedWorkTitle: work.title || service.title,
+      if (!route.params.fromCart)
+        bookingWorkPrices.forEach(work => {
+          addToCart({
+            ...service,
+            price: Number(work.price || service.price),
+            selectedWorkPrice: work,
+            selectedWorkPriceId: work.id || undefined,
+            selectedWorkTitle: work.title || service.title,
+          });
         });
-      });
-      if (route.params.fromCart && !cart.length) throw new Error('Your cart is empty. Add a service before booking.');
+      if (route.params.fromCart && !cart.length)
+        throw new Error('Your cart is empty. Add a service before booking.');
       const order = await checkout({
         bookedFor: scheduleLabel,
         paymentMethod: selectedPayment,
@@ -740,7 +819,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
       if (Number(order.total || 0) > 0) {
         await setPendingPaymentOrderId(order.id);
       }
-      navigation.navigate('Main', { screen: 'Bookings' });
+      navigation.navigate('Main', {screen: 'Bookings'});
     } catch (error: any) {
       showMessage({
         title: 'Booking failed',
@@ -875,7 +954,9 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
             <View style={styles.addressModalHeader}>
               <View>
                 <Text style={styles.addressModalTitle}>Add New Address</Text>
-                <Text style={styles.addressModalSubtitle}>Enter label and full address details</Text>
+                <Text style={styles.addressModalSubtitle}>
+                  Enter label and full address details
+                </Text>
               </View>
               <Pressable
                 style={styles.addressModalCloseBtn}
@@ -955,7 +1036,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                         hourClosed && styles.clockMiniChipDisabled,
                       ]}
                       disabled={hourClosed}
-                      onPress={() => applyCustomTime({ hour })}
+                      onPress={() => applyCustomTime({hour})}
                     >
                       <Text
                         style={[
@@ -971,9 +1052,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                 })}
               </View>
 
-              <Text style={styles.clockControlLabel}>
-                Minutes
-              </Text>
+              <Text style={styles.clockControlLabel}>Minutes</Text>
               <View style={styles.clockChipRow}>
                 {CUSTOM_MINUTES.map(minute => {
                   const minuteClosed = isClosedTime(
@@ -989,13 +1068,13 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                         minuteClosed && styles.clockMiniChipDisabled,
                       ]}
                       disabled={minuteClosed}
-                      onPress={() => applyCustomTime({ minute })}
+                      onPress={() => applyCustomTime({minute})}
                     >
                       <Text
                         style={[
                           styles.clockMiniChipText,
                           customMinute === minute &&
-                          styles.clockMiniChipTextActive,
+                            styles.clockMiniChipTextActive,
                           minuteClosed && styles.clockMiniChipTextDisabled,
                         ]}
                       >
@@ -1006,9 +1085,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                 })}
               </View>
 
-              <Text style={styles.clockControlLabel}>
-                AM / PM
-              </Text>
+              <Text style={styles.clockControlLabel}>AM / PM</Text>
               <View style={styles.clockChipRow}>
                 {CUSTOM_PERIODS.map(period => {
                   const periodClosed = isClosedTime(
@@ -1024,13 +1101,13 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                         periodClosed && styles.clockMiniChipDisabled,
                       ]}
                       disabled={periodClosed}
-                      onPress={() => applyCustomTime({ period })}
+                      onPress={() => applyCustomTime({period})}
                     >
                       <Text
                         style={[
                           styles.clockMiniChipText,
                           customPeriod === period &&
-                          styles.clockMiniChipTextActive,
+                            styles.clockMiniChipTextActive,
                           periodClosed && styles.clockMiniChipTextDisabled,
                         ]}
                       >
@@ -1062,37 +1139,6 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
         </View>
       </Modal>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        {message && (
-          <View
-            style={[
-              styles.messageBanner,
-              message.tone === 'error'
-                ? styles.messageBannerError
-                : styles.messageBannerWarning,
-            ]}
-          >
-            <Text
-              style={[
-                styles.messageTitle,
-                message.tone === 'error'
-                  ? styles.messageTextError
-                  : styles.messageTextWarning,
-              ]}
-            >
-              {message.title}
-            </Text>
-            <Text
-              style={[
-                styles.messageBody,
-                message.tone === 'error'
-                  ? styles.messageTextError
-                  : styles.messageTextWarning,
-              ]}
-            >
-              {message.body}
-            </Text>
-          </View>
-        )}
         {/* â”€â”€ Header â”€â”€ */}
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
@@ -1110,15 +1156,50 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
         </View>
 
         <ScrollView
-          style={{ flex: 1 }}
+          style={{flex: 1}}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
+          {message ? (
+            <View
+              style={[
+                styles.messageBanner,
+                styles.messageBannerInScroll,
+                message.tone === 'error'
+                  ? styles.messageBannerError
+                  : styles.messageBannerWarning,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.messageTitle,
+                  message.tone === 'error'
+                    ? styles.messageTextError
+                    : styles.messageTextWarning,
+                ]}
+              >
+                {message.title}
+              </Text>
+              <Text
+                style={[
+                  styles.messageBody,
+                  message.tone === 'error'
+                    ? styles.messageTextError
+                    : styles.messageTextWarning,
+                ]}
+              >
+                {message.body}
+              </Text>
+            </View>
+          ) : null}
           {/* â”€â”€ Pro Card â”€â”€ */}
           <View style={styles.proCard}>
             <View style={styles.proAvatar}>
               {service.imageUrl ? (
-                <Image source={{ uri: service.imageUrl }} style={styles.proAvatarImage} />
+                <Image
+                  source={{uri: service.imageUrl}}
+                  style={styles.proAvatarImage}
+                />
               ) : (
                 <Text style={styles.proAvatarText}>
                   {selectedWorkTitle.charAt(0).toUpperCase()}
@@ -1202,7 +1283,9 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                   onPress={() => {
                     setSelectedDay(i);
                     if (isRecurring && recurringEndDay < i) {
-                      setRecurringEndDay(Math.min(i + 7, bookingDays.length - 1));
+                      setRecurringEndDay(
+                        Math.min(i + 7, bookingDays.length - 1),
+                      );
                     }
                   }}
                 >
@@ -1261,7 +1344,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                           style={[
                             styles.dayLabel,
                             recurringEndDay === dayIndex &&
-                            styles.dayLabelActive,
+                              styles.dayLabelActive,
                           ]}
                         >
                           {day.label}
@@ -1278,7 +1361,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                           style={[
                             styles.dayMonth,
                             recurringEndDay === dayIndex &&
-                            styles.dayMonthActive,
+                              styles.dayMonthActive,
                           ]}
                         >
                           {day.monthShort}
@@ -1296,14 +1379,22 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
             <Text style={styles.sectionTitle}>Preferred Time</Text>
 
             <Text style={styles.timeHelp}>
-              {noTimeAvailableToday ? 'Currently our workers are busy. Please select another date.' : 'Choose a time at least ' + minimumBookingLeadHours + ' hour(s) from now. Operational daily from 6:00 AM to 11:00 PM.'}
+              {noTimeAvailableToday
+                ? 'Currently our workers are busy. Please select another date.'
+                : 'Choose a time at least ' +
+                  minimumBookingLeadHours +
+                  ' hour(s) from now. Operational daily from 6:00 AM to 11:00 PM.'}
             </Text>
 
             <Text style={styles.timePeriodLabel}>QUICK TIMES</Text>
             <View style={styles.timeRow}>
               {QUICK_TIME_SLOTS.map(slot => {
                 const slotClosed = isClosedTime(slot);
-                const slotTooSoon = isBeforeBookingLeadTime(slot, selectedDay, minimumBookingLeadHours);
+                const slotTooSoon = isBeforeBookingLeadTime(
+                  slot,
+                  selectedDay,
+                  minimumBookingLeadHours,
+                );
                 const slotUnavailable = slotClosed || slotTooSoon;
 
                 return (
@@ -1392,7 +1483,11 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                       }}
                       disabled={locatingAddress}
                     >
-                      <LocateFixed color="#006c49" size={14} strokeWidth={2.3} />
+                      <LocateFixed
+                        color="#006c49"
+                        size={14}
+                        strokeWidth={2.3}
+                      />
                       <Text style={styles.currentLocationUpdateText}>
                         {locatingAddress ? 'Updating...' : 'Update'}
                       </Text>
@@ -1402,7 +1497,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                     {savedServiceLocation.address}
                   </Text>
                   {typeof savedServiceLocation.latitude === 'number' &&
-                    typeof savedServiceLocation.longitude === 'number' ? (
+                  typeof savedServiceLocation.longitude === 'number' ? (
                     <CurrentLocationMapPreview
                       location={{
                         latitude: savedServiceLocation.latitude,
@@ -1434,11 +1529,16 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                   styles.addressCard,
                   selectedAddressId === addr.id && styles.addressCardActive,
                 ]}
-                onPress={() => setSelectedAddressId(addr.id)}
+                onPress={() => {
+                  setSelectedAddressId(addr.id);
+                  setLocationFailure('');
+                }}
               >
                 <View style={styles.addressIconBox}>
                   <MapPin
-                    color={selectedAddressId === addr.id ? '#006c49' : '#45464d'}
+                    color={
+                      selectedAddressId === addr.id ? '#006c49' : '#45464d'
+                    }
                     size={20}
                   />
                 </View>
@@ -1455,9 +1555,30 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                 onPress={() => setAddressFormVisible(true)}
               >
                 <Plus color="#006c49" size={16} />
-                <Text style={styles.addAddressHintText}>Tap "Add New" to save a service address</Text>
+                <Text style={styles.addAddressHintText}>
+                  Tap "Add New" to save a service address
+                </Text>
               </Pressable>
             )}
+
+            {locationFailure ? (
+              <View style={styles.locationFailureCard}>
+                <Text style={styles.locationFailureTitle}>
+                  Location is unavailable
+                </Text>
+                <Text style={styles.locationFailureText}>
+                  {locationFailure}
+                </Text>
+                <View style={styles.locationFailureActions}>
+                  <Pressable
+                    style={styles.manualAddressButton}
+                    onPress={() => setAddressFormVisible(true)}
+                  >
+                    <Text style={styles.manualAddressText}>Enter manually</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </View>
 
           {/* â”€â”€ Special Instructions â”€â”€ */}
@@ -1479,7 +1600,8 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Payment Method</Text>
             <Text style={styles.paymentNote}>
-              Easypaisa account: {appSettings.supportPhone || 'Contact support for details'}
+              Easypaisa account:{' '}
+              {appSettings.supportPhone || 'Contact support for details'}
             </Text>
             {PAYMENT_METHODS.map(method => {
               const isSelected = selectedPayment === method.id;
@@ -1497,7 +1619,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                       styles.paymentIconBox,
                       method.image
                         ? styles.paymentIconBoxBrand
-                        : { backgroundColor: method.color + '18' },
+                        : {backgroundColor: method.color + '18'},
                     ]}
                   >
                     {method.image ? (
@@ -1507,20 +1629,29 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                         resizeMode="contain"
                       />
                     ) : (
-                      method.Icon && <method.Icon color={method.color} size={20} />
+                      method.Icon && (
+                        <method.Icon color={method.color} size={20} />
+                      )
                     )}
                   </View>
                   <View style={styles.paymentLabelBox}>
-                    <Text style={[
-                      styles.paymentLabel,
-                      isSelected && styles.paymentLabelActive,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.paymentLabel,
+                        isSelected && styles.paymentLabelActive,
+                      ]}
+                    >
                       {method.label}
                       {method.discount > 0 ? (
-                        <Text style={styles.paymentDiscountBadge}> ●  {method.discount}% OFF</Text>
+                        <Text style={styles.paymentDiscountBadge}>
+                          {' '}
+                          ● {method.discount}% OFF
+                        </Text>
                       ) : null}
                     </Text>
-                    <Text style={styles.paymentDescription}>{method.description}</Text>
+                    <Text style={styles.paymentDescription}>
+                      {method.description}
+                    </Text>
                   </View>
                   <View
                     style={[
@@ -1528,28 +1659,44 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                       isSelected && styles.radioCircleActive,
                     ]}
                   >
-                    {isSelected && (
-                      <View style={styles.radioInner} />
-                    )}
+                    {isSelected && <View style={styles.radioInner} />}
                   </View>
                 </Pressable>
               );
             })}
           </View>
           <Pressable
-            style={[styles.rewardBox, useWalletBalance && styles.rewardBoxActive, walletBalance <= 0 && styles.rewardBoxDisabled]}
+            style={[
+              styles.rewardBox,
+              useWalletBalance && styles.rewardBoxActive,
+              walletBalance <= 0 && styles.rewardBoxDisabled,
+            ]}
             disabled={walletBalance <= 0}
-            onPress={() => setUseWalletBalance(value => !value)}>
+            onPress={() => setUseWalletBalance(value => !value)}
+          >
             <View style={styles.rewardIconBox}>
               <WalletCards color="#006c49" size={21} strokeWidth={2.2} />
             </View>
             <View style={styles.rewardCopy}>
               <Text style={styles.rewardTitle}>Use wallet balance</Text>
-              <Text style={styles.rewardText}>Available: {formatPkr(walletBalance)}</Text>
-              <Text style={styles.rewardHint}>{walletBalance > 0 ? `Apply up to ${formatPkr(Math.min(walletBalance, total))} to this booking.` : 'No wallet balance is available.'}</Text>
+              <Text style={styles.rewardText}>
+                Available: {formatPkr(walletBalance)}
+              </Text>
+              <Text style={styles.rewardHint}>
+                {walletBalance > 0
+                  ? `Apply up to ${formatPkr(Math.min(walletBalance, total))} to this booking.`
+                  : 'No wallet balance is available.'}
+              </Text>
             </View>
-            <View style={[styles.rewardCheckbox, useWalletBalance && styles.rewardCheckboxChecked]}>
-              {useWalletBalance ? <Check color="#ffffff" size={14} strokeWidth={3} /> : null}
+            <View
+              style={[
+                styles.rewardCheckbox,
+                useWalletBalance && styles.rewardCheckboxChecked,
+              ]}
+            >
+              {useWalletBalance ? (
+                <Check color="#ffffff" size={14} strokeWidth={3} />
+              ) : null}
             </View>
           </Pressable>
 
@@ -1579,8 +1726,8 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
                 <Text style={styles.rewardHint}>
                   {canRedeemRewardForBooking
                     ? `Use up to ${formatPkr(
-                      redeemableRewardValue,
-                    )} off this service. Earn ${serviceRewardPointsOnCompletion} point after completion.`
+                        redeemableRewardValue,
+                      )} off this service. Earn ${serviceRewardPointsOnCompletion} point after completion.`
                     : rewardPointsNeeded > 0
                       ? `${rewardPointsNeeded} more point(s) needed to redeem rewards.`
                       : `Reward discount is below the ${formatPkr(rewardMinimumRedeem)} minimum for this booking.`}
@@ -1619,7 +1766,8 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
             {rewardDiscount > 0 ? (
               <View style={styles.summaryRow}>
                 <Text style={styles.rewardSummaryLabel}>
-                  Reward discount ({Math.round(rewardDiscount / rewardPointValue)} points)
+                  Reward discount (
+                  {Math.round(rewardDiscount / rewardPointValue)} points)
                 </Text>
                 <Text style={styles.rewardSummaryValue}>
                   -{formatPkr(rewardDiscount)}
@@ -1628,13 +1776,19 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
             ) : null}
             {fullAdvanceDiscount > 0 ? (
               <View style={styles.summaryRow}>
-                <Text style={styles.rewardSummaryLabel}>Full advance discount (5%)</Text>
-                <Text style={styles.rewardSummaryValue}>-{formatPkr(fullAdvanceDiscount)}</Text>
+                <Text style={styles.rewardSummaryLabel}>
+                  Full advance discount (5%)
+                </Text>
+                <Text style={styles.rewardSummaryValue}>
+                  -{formatPkr(fullAdvanceDiscount)}
+                </Text>
               </View>
             ) : null}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Inspection Fee</Text>
-              <Text style={styles.summaryValue}>{formatPkr(inspectionFee)}</Text>
+              <Text style={styles.summaryValue}>
+                {formatPkr(inspectionFee)}
+              </Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
@@ -1644,29 +1798,40 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
             </View>
             {walletAdjustment > 0 ? (
               <View style={styles.summaryRow}>
-                <Text style={styles.rewardSummaryLabel}>Wallet balance applied</Text>
-                <Text style={styles.rewardSummaryValue}>-{formatPkr(walletAdjustment)}</Text>
+                <Text style={styles.rewardSummaryLabel}>
+                  Wallet balance applied
+                </Text>
+                <Text style={styles.rewardSummaryValue}>
+                  -{formatPkr(walletAdjustment)}
+                </Text>
               </View>
             ) : null}
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryTotalLabel}>{walletAdjustment > 0 ? 'Amount to Pay' : 'Total Amount'}</Text>
+              <Text style={styles.summaryTotalLabel}>
+                {walletAdjustment > 0 ? 'Amount to Pay' : 'Total Amount'}
+              </Text>
               <Text style={styles.summaryTotal}>{formatPkr(amountToPay)}</Text>
             </View>
             {selectedPayment === 'Rs 200 Advance' && amountToPay > 0 && (
               <View style={styles.advanceNote}>
                 <Text style={styles.advanceNoteText}>
-                  {formatPkr(Math.min(200, amountToPay))} advance via Easypaisa required. Remaining {formatPkr(Math.max(0, amountToPay - 200))} payable after service.
+                  {formatPkr(Math.min(200, amountToPay))} advance via Easypaisa
+                  required. Remaining{' '}
+                  {formatPkr(Math.max(0, amountToPay - 200))} payable after
+                  service.
                 </Text>
               </View>
             )}
-            {selectedPayment === 'Full Payment in Advance' && amountToPay > 0 && (
-              <View style={styles.advanceNoteGreen}>
-                <Text style={styles.advanceNoteGreenText}>
-                  Full amount {formatPkr(amountToPay)} payable via Easypaisa in advance. 5% discount already applied!
-                </Text>
-              </View>
-            )}
+            {selectedPayment === 'Full Payment in Advance' &&
+              amountToPay > 0 && (
+                <View style={styles.advanceNoteGreen}>
+                  <Text style={styles.advanceNoteGreenText}>
+                    Full amount {formatPkr(amountToPay)} payable via Easypaisa
+                    in advance. 5% discount already applied!
+                  </Text>
+                </View>
+              )}
             <View style={styles.scheduledRow}>
               <Text style={styles.scheduledLabel}>
                 Scheduled For: {scheduleLabel}
@@ -1675,7 +1840,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
             </View>
           </View>
 
-          <View style={{ height: 100 }} />
+          <View style={{height: 100}} />
         </ScrollView>
 
         {/* ——— Footer CTA ——— */}
@@ -1683,7 +1848,8 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
           <Pressable
             style={[
               styles.confirmBtn,
-              (confirming || selectedTimeUnavailable) && styles.confirmBtnDisabled,
+              (confirming || selectedTimeUnavailable) &&
+                styles.confirmBtnDisabled,
             ]}
             onPress={handleConfirmBooking}
             disabled={confirming || successVisible || selectedTimeUnavailable}
@@ -1705,7 +1871,7 @@ export function BookingScreen({ navigation, route }: Props): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8f9ff' },
+  safe: {flex: 1, backgroundColor: '#f8f9ff'},
   messageBanner: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -1713,6 +1879,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  messageBannerInScroll: {
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 12,
   },
   messageBannerWarning: {
     backgroundColor: '#fffbeb',
@@ -1756,7 +1927,7 @@ const styles = StyleSheet.create({
     shadowColor: '#0b1c30',
     shadowOpacity: 0.18,
     shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
+    shadowOffset: {width: 0, height: 14},
   },
   successIconWrap: {
     width: 86,
@@ -1798,7 +1969,7 @@ const styles = StyleSheet.create({
     shadowColor: '#0b1c30',
     shadowOpacity: 0.18,
     shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
+    shadowOffset: {width: 0, height: 14},
   },
   confirmTitle: {
     fontFamily: fontFamily.bold,
@@ -1947,7 +2118,7 @@ const styles = StyleSheet.create({
     color: '#0b1c30',
   },
 
-  content: { paddingBottom: 20 },
+  content: {paddingBottom: 20},
 
   // Pro Card
   proCard: {
@@ -1981,8 +2152,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: '#0b1c30',
   },
-  proInfo: { flex: 1 },
-  proName: { fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30' },
+  proInfo: {flex: 1},
+  proName: {fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30'},
   proSpecialty: {
     fontFamily: fontFamily.regular,
     fontSize: 13,
@@ -2003,7 +2174,7 @@ const styles = StyleSheet.create({
   },
 
   // Sections
-  section: { paddingHorizontal: 16, paddingVertical: 16 },
+  section: {paddingHorizontal: 16, paddingVertical: 16},
   sectionHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2050,7 +2221,7 @@ const styles = StyleSheet.create({
   bookingModeTextActive: {
     color: '#ffffff',
   },
-  dayRow: { flexDirection: 'row', gap: 8, paddingRight: 16 },
+  dayRow: {flexDirection: 'row', gap: 8, paddingRight: 16},
   dayChip: {
     width: 68,
     minHeight: 72,
@@ -2071,21 +2242,21 @@ const styles = StyleSheet.create({
     color: '#76777d',
     letterSpacing: 0.5,
   },
-  dayLabelActive: { color: '#bec6e0' },
+  dayLabelActive: {color: '#bec6e0'},
   dayNum: {
     fontFamily: fontFamily.bold,
     fontSize: 17,
     color: '#0b1c30',
     marginTop: 2,
   },
-  dayNumActive: { color: '#ffffff' },
+  dayNumActive: {color: '#ffffff'},
   dayMonth: {
     fontFamily: fontFamily.bold,
     fontSize: 10,
     color: '#76777d',
     marginTop: 2,
   },
-  dayMonthActive: { color: '#bec6e0' },
+  dayMonthActive: {color: '#bec6e0'},
   recurringBox: {
     borderRadius: rounded.lg,
     borderWidth: 1,
@@ -2157,9 +2328,9 @@ const styles = StyleSheet.create({
     borderColor: '#e1e4ed',
     opacity: 0.55,
   },
-  timeText: { fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30' },
-  timeTextActive: { color: '#ffffff' },
-  timeTextDisabled: { color: '#76777d' },
+  timeText: {fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30'},
+  timeTextActive: {color: '#ffffff'},
+  timeTextDisabled: {color: '#76777d'},
   customTimeButton: {
     minHeight: 70,
     borderRadius: rounded.lg,
@@ -2563,8 +2734,8 @@ const styles = StyleSheet.create({
   },
 
   // Address
-  addNewRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  addNewText: { fontFamily: fontFamily.bold, fontSize: 13, color: '#006c49' },
+  addNewRow: {flexDirection: 'row', alignItems: 'center', gap: 4},
+  addNewText: {fontFamily: fontFamily.bold, fontSize: 13, color: '#006c49'},
   addressCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2599,7 +2770,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addressInfo: { flex: 1 },
+  addressInfo: {flex: 1},
   currentLocationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2668,7 +2839,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b1c30',
     borderWidth: 3,
     borderColor: '#ffffff',
-    transform: [{ rotate: '45deg' }],
+    transform: [{rotate: '45deg'}],
   },
   currentLocationPinDot: {
     position: 'absolute',
@@ -2680,7 +2851,8 @@ const styles = StyleSheet.create({
     marginTop: -15.5,
     borderRadius: 3.5,
     backgroundColor: '#ffffff',
-  }, addressLabel: { fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30' },
+  },
+  addressLabel: {fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30'},
   addressDetail: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
@@ -2721,6 +2893,47 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     color: '#006c49',
     fontSize: 13,
+  },
+  locationFailureCard: {
+    borderRadius: rounded.default,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff7f7',
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  locationFailureTitle: {
+    fontFamily: fontFamily.bold,
+    color: '#991b1b',
+    fontSize: 13,
+  },
+  locationFailureText: {
+    fontFamily: fontFamily.regular,
+    color: '#7f1d1d',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  locationFailureActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  manualAddressButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: rounded.default,
+    borderWidth: 1,
+    borderColor: '#006c49',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manualAddressText: {
+    fontFamily: fontFamily.bold,
+    color: '#006c49',
+    fontSize: 12,
   },
   addressInput: {
     minHeight: 46,
@@ -2805,7 +3018,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioCircleActive: { borderColor: '#006c49' },
+  radioCircleActive: {borderColor: '#006c49'},
   radioInner: {
     width: 10,
     height: 10,
@@ -2917,14 +3130,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#006c49',
   },
-  summaryValue: { fontFamily: fontFamily.medium, fontSize: 14, color: '#0b1c30' },
-  summaryDivider: { height: 1, backgroundColor: '#e5eeff', marginVertical: 4 },
+  summaryValue: {fontFamily: fontFamily.medium, fontSize: 14, color: '#0b1c30'},
+  summaryDivider: {height: 1, backgroundColor: '#e5eeff', marginVertical: 4},
   summaryTotalLabel: {
     fontFamily: fontFamily.bold,
     fontSize: 15,
     color: '#0b1c30',
   },
-  summaryTotal: { fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30' },
+  summaryTotal: {fontFamily: fontFamily.bold, fontSize: 16, color: '#0b1c30'},
   scheduledRow: {
     backgroundColor: '#f8f9ff',
     borderRadius: rounded.default,
@@ -2940,7 +3153,7 @@ const styles = StyleSheet.create({
     color: '#45464d',
     flex: 1,
   },
-  scheduledPrice: { fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30' },
+  scheduledPrice: {fontFamily: fontFamily.bold, fontSize: 14, color: '#0b1c30'},
 
   // Footer
   footer: {
@@ -2975,8 +3188,8 @@ const styles = StyleSheet.create({
     marginHorizontal: -10,
     marginBottom: 4,
   },
-  paymentLabelBox: { flex: 1 },
-  paymentLabelActive: { color: '#006c49' },
+  paymentLabelBox: {flex: 1},
+  paymentLabelActive: {color: '#006c49'},
   paymentDescription: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
@@ -3041,7 +3254,7 @@ const styles = StyleSheet.create({
     shadowColor: '#0b1c30',
     shadowOpacity: 0.18,
     shadowRadius: 24,
-    shadowOffset: { width: 0, height: -8 },
+    shadowOffset: {width: 0, height: -8},
   },
   addressModalHeader: {
     flexDirection: 'row',
@@ -3092,9 +3305,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#006c49',
   },
-  confirmText: { fontFamily: fontFamily.bold, color: '#ffffff', fontSize: 16 },
-  zapIcon: { marginLeft: 4 },
+  confirmText: {fontFamily: fontFamily.bold, color: '#ffffff', fontSize: 16},
+  zapIcon: {marginLeft: 4},
 });
-
-
-

@@ -336,6 +336,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       set(nextState);
+      if (nextState.isAuthenticated) {
+        lastOrdersFingerprint = '';
+        ordersRequest = null;
+        await Promise.all([
+          get().fetchOrders(),
+          get().fetchShopOrders(),
+          get().fetchAddresses(),
+        ]);
+      }
     } catch (error) {
       console.error('Hydrate app state error:', error);
       await clearAuthSession();
@@ -449,7 +458,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         isAuthenticated: true,
         isGuest: false,
         user,
+        orders: [],
+        shopOrders: [],
+        addresses: [],
       });
+      lastOrdersFingerprint = '';
+      ordersRequest = null;
+      await Promise.all([
+        get().fetchOrders(),
+        get().fetchShopOrders(),
+        get().fetchAddresses(),
+      ]);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -467,7 +486,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         isAuthenticated: true,
         isGuest: false,
         user,
+        orders: [],
+        shopOrders: [],
+        addresses: [],
       });
+      lastOrdersFingerprint = '';
+      ordersRequest = null;
+      await Promise.all([
+        get().fetchOrders(),
+        get().fetchShopOrders(),
+        get().fetchAddresses(),
+      ]);
     } catch (error) {
       // LoginScreen presents expected API failures, including deleted accounts.
       // Avoid sending handled 404 responses to React Native development LogBox.
@@ -495,7 +524,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         isAuthenticated: true,
         isGuest: false,
         user,
+        orders: [],
+        shopOrders: [],
+        addresses: [],
       });
+      lastOrdersFingerprint = '';
+      ordersRequest = null;
+      await Promise.all([
+        get().fetchOrders(),
+        get().fetchShopOrders(),
+        get().fetchAddresses(),
+      ]);
     } catch (error) {
       console.error('Login OTP verification error:', error);
       throw error;
@@ -540,7 +579,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         isAuthenticated: true,
         isGuest: false,
         user,
+        orders: [],
+        shopOrders: [],
+        addresses: [],
       });
+      lastOrdersFingerprint = '';
+      ordersRequest = null;
+      await Promise.all([
+        get().fetchOrders(),
+        get().fetchShopOrders(),
+        get().fetchAddresses(),
+      ]);
     } catch (error) {
       console.error('Signup OTP verification error:', error);
       throw error;
@@ -550,6 +599,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   logout: async () => {
     await clearAuthSession();
     await AsyncStorage.removeItem(GUEST_SESSION_KEY);
+    lastOrdersFingerprint = '';
+    ordersRequest = null;
     set({
       isAuthenticated: false,
       isGuest: false,
