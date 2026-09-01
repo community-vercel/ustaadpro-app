@@ -36,6 +36,7 @@ import {
   LogOut,
   MapPin,
   PackageCheck,
+  Settings,
   ShoppingCart,
   User,
   X,
@@ -339,6 +340,14 @@ export function HomeTab(): React.JSX.Element {
         label: 'Service Cart',
         Icon: ShoppingCart,
         onPress: () => navigation.navigate('Cart'),
+      },
+      {
+        label: 'Settings',
+        Icon: Settings,
+        onPress: () =>
+          user
+            ? navigation.navigate('Settings')
+            : navigation.navigate('Auth', {screen: 'Login'}),
       },
       {
         label: 'About Ustaad Pro',

@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Eye,
   EyeOff,
+  Fingerprint,
   Lock,
   Mail,
   Phone,
@@ -26,6 +27,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme/colors';
 import { fontFamily } from '@/theme/typography';
 import { rounded } from '@/theme/layout';
+import * as Keychain from 'react-native-keychain';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 interface MessageState {
@@ -58,6 +60,32 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const resetPasswordWithOtp = useAppStore(
     state => state.resetPasswordWithOtp,
   );
+  const verifyPinAction = useAppStore(state => state.verifyPinAction);
+  const biometricEnabled = useAppStore(state => state.biometricEnabled);
+  const biometricPhone = useAppStore(state => state.biometricPhone);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+
+  const handleBiometricLogin = async () => {
+    setBiometricLoading(true);
+    try {
+      const credentials = await Keychain.getGenericPassword({
+        service: 'com.ustaadpro.biometric',
+        authenticationPrompt: {
+          title: 'UstaadPro Login',
+          subtitle: 'Use your fingerprint or Face ID to log in',
+          cancel: 'Cancel',
+        },
+      });
+      if (credentials && credentials.password && biometricPhone) {
+        await verifyPinAction(biometricPhone, credentials.password);
+        navigation.dispatch(CommonActions.navigate({name: 'Main'}));
+      }
+    } catch (e: any) {
+      // User cancelled — do nothing, let them use phone/password
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('phone');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -101,7 +129,11 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
       setLoading(true);
       try {
-        await loginWithPhone(`+92${phone}`);
+        const result = await loginWithPhone(`+92${phone}`);
+        if (result?.requiresPin) {
+          // User has PIN set — navigate to PIN login screen
+          navigation.navigate('PinLogin', {phone: `+92${phone}`});
+        }
       } catch (error: any) {
         showMessage({
           title: 'Login failed',
@@ -550,6 +582,29 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             </Text>
           </Pressable>
 
+          {/* Fingerprint / Face ID quick-login button */}
+          {biometricEnabled && biometricPhone ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.biometricButton,
+                pressed && { opacity: 0.75 },
+                biometricLoading && { opacity: 0.6 },
+              ]}
+              onPress={handleBiometricLogin}
+              disabled={biometricLoading || loading}
+            >
+              <Fingerprint
+                color="#6545d8"
+                size={22}
+                strokeWidth={2.2}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.biometricButtonText}>
+                {biometricLoading ? 'Verifying...' : 'Login with Fingerprint'}
+              </Text>
+            </Pressable>
+          ) : null}
+
           <Pressable
             style={styles.forgotButton}
             onPress={() => {
@@ -820,6 +875,22 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     color: '#ffffff',
     fontSize: 16,
+  },
+  biometricButton: {
+    height: 54,
+    borderRadius: rounded.default,
+    borderWidth: 2,
+    borderColor: '#6545d8',
+    backgroundColor: '#f5f2ff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  biometricButtonText: {
+    fontFamily: fontFamily.bold,
+    color: '#6545d8',
+    fontSize: 15,
   },
   forgotButton: {
     alignSelf: 'center',

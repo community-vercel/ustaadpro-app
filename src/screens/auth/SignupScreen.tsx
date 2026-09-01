@@ -108,10 +108,19 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
           code: otpCode,
           verificationChannel,
         });
+        // Navigate to PIN setup screen (in Root stack)
+        navigation.getParent()?.navigate('SetPin');
       } catch (error: any) {
+        const serverMsg = error?.response?.data?.message;
+        const serverStatus = error?.response?.status;
+        console.error('[SignupScreen] verifySignupOtp failed:', JSON.stringify({
+          status: serverStatus,
+          message: serverMsg,
+          fullData: error?.response?.data,
+        }));
         showMessage({
           title: 'Verification failed',
-          body: error.response?.data?.message || 'Something went wrong',
+          body: serverMsg || `Server error ${serverStatus || 'unknown'}. Check server logs.`,
           tone: 'error',
         });
       } finally {

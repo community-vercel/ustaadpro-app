@@ -584,6 +584,7 @@ export function StoreTab(): React.JSX.Element {
                     <Image
                       source={{uri: selectedProduct.imageUrl}}
                       style={styles.detailImage}
+                      resizeMode="contain"
                     />
                   ) : (
                     <Package color={colors.secondary} size={44} />
@@ -1102,6 +1103,7 @@ export function StoreTab(): React.JSX.Element {
                       <Image
                         source={{uri: resolveApiAssetUrl(product.imageUrl)}}
                         style={styles.productImage}
+                        resizeMode="contain"
                       />
                     ) : (
                       <Package color={colors.secondary} size={28} />
@@ -1388,7 +1390,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 10,
   },
-  productImage: {width: '100%', height: '100%'},
+  productImage: {width: '100%', height: '100%', resizeMode: 'contain'},
   inCartPill: {
     position: 'absolute',
     top: 8,
@@ -1777,7 +1779,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 16,
   },
-  detailImage: {width: '100%', height: '100%'},
+  detailImage: {width: '100%', height: '100%', resizeMode: 'contain'},
   detailCategory: {
     fontFamily: fontFamily.bold,
     fontWeight: '800',

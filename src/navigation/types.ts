@@ -5,6 +5,8 @@ export type AuthStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Signup: undefined;
+  SetPin: undefined;
+  PinLogin: { phone: string };
 };
 
 export type MainTabParamList = {
@@ -33,4 +35,6 @@ export type RootStackParamList = {
   About: undefined;
   PrivacyPolicy: undefined;
   Complaints: undefined;
+  Settings: undefined;
+  SetPin: undefined;
 };

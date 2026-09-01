@@ -1,8 +1,10 @@
 import React, {useMemo, useState} from 'react';
 import {
+  Dimensions,
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -91,13 +93,16 @@ export function NotificationCenter({
         visible={visible}
         transparent={false}
         animationType="slide"
+        statusBarTranslucent={Platform.OS === 'android'}
         onRequestClose={() => setVisible(false)}
       >
-        <SafeAreaView style={styles.screen} edges={['bottom']}>
+        <SafeAreaView style={styles.screen} edges={['top', 'bottom', 'left', 'right']}>
           <View style={styles.page}>
-            <View style={[styles.sheetHeader, {paddingTop: insets.top + 18}]}>
-              <View style={{ flex: 1, paddingRight: 16 }}>
-                <Text style={styles.sheetTitle} numberOfLines={1} adjustsFontSizeToFit>Notifications</Text>
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHeaderText}>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  Notifications
+                </Text>
                 <Text style={styles.sheetSubtitle} numberOfLines={1}>
                   {notifications.length
                     ? `${notifications.length} push notification${notifications.length === 1 ? '' : 's'}`
@@ -106,7 +111,8 @@ export function NotificationCenter({
               </View>
               <Pressable
                 onPress={() => setVisible(false)}
-                hitSlop={10}
+                hitSlop={16}
+                style={styles.closeButton}
                 accessibilityLabel="Close notifications"
               >
                 <X color={colors.muted} size={20} strokeWidth={2.2} />
@@ -131,14 +137,14 @@ export function NotificationCenter({
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               ListEmptyComponent={
                 <View style={styles.empty}>
-                <View style={styles.emptyIcon}>
-                  <CircleAlert color={colors.secondary} size={28} strokeWidth={2.2} />
+                  <View style={styles.emptyIcon}>
+                    <CircleAlert color={colors.secondary} size={28} strokeWidth={2.2} />
+                  </View>
+                  <Text style={styles.emptyTitle}>Nothing here yet</Text>
+                  <Text style={styles.emptyBody}>
+                    Order updates and app messages will appear here.
+                  </Text>
                 </View>
-                <Text style={styles.emptyTitle}>Nothing here yet</Text>
-                <Text style={styles.emptyBody}>
-                  Order updates and app messages will appear here.
-                </Text>
-              </View>
               }
               renderItem={({item}) => {
                 const meta = getNotificationMeta(item.title, item.body, item.orderId);
@@ -149,6 +155,9 @@ export function NotificationCenter({
                     style={[styles.item, !item.read && styles.itemUnread]}
                     onPress={async () => {
                       await markNotificationRead(item.id);
+                      if (item.orderId && onPaymentNotificationPress) {
+                        onPaymentNotificationPress(item.orderId);
+                      }
                     }}
                   >
                     <View style={[styles.itemIcon, {backgroundColor: meta.surface}]}>
@@ -162,14 +171,14 @@ export function NotificationCenter({
                       </View>
                     </View>
                     <View style={styles.itemCopy}>
-                      <Text style={styles.itemTitle} numberOfLines={1}>
+                      <Text style={styles.itemTitle} numberOfLines={2}>
                         {item.title}
                       </Text>
-                      <Text style={styles.itemBody} numberOfLines={3}>
+                      <Text style={styles.itemBody} numberOfLines={4}>
                         {item.body}
                       </Text>
                     </View>
-                    <Text style={styles.itemTime}>
+                    <Text style={styles.itemTime} numberOfLines={1}>
                       {new Date(item.createdAt).toLocaleTimeString([], {
                         hour: 'numeric',
                         minute: '2-digit',
@@ -186,10 +195,12 @@ export function NotificationCenter({
   );
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   button: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: rounded.full,
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -213,6 +224,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     color: '#ffffff',
     fontSize: 10,
+    lineHeight: 12,
   },
   screen: {
     flex: 1,
@@ -221,31 +233,49 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     backgroundColor: colors.bg,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
   },
   sheetHeader: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
+    paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 14,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: '#eff4ff',
   },
+  sheetHeaderText: {
+    flex: 1,
+    paddingRight: 12,
+  },
   sheetTitle: {
     fontFamily: fontFamily.extraBold,
     color: colors.ink,
-    fontSize: 20,
+    fontSize: 22,
+    lineHeight: 28,
   },
   sheetSubtitle: {
     fontFamily: fontFamily.medium,
     color: colors.muted,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: rounded.full,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   list: {
     padding: 16,
-    paddingBottom: 34,
+    paddingBottom: 40,
   },
   listEmpty: {
     flexGrow: 1,
@@ -262,6 +292,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9ff',
     borderWidth: 1,
     borderColor: '#e5eeff',
+    minWidth: 0,
   },
   itemUnread: {
     backgroundColor: '#effcf6',
@@ -280,6 +311,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: {width: 0, height: 4},
     elevation: 3,
+    flexShrink: 0,
   },
   itemLogo: {
     width: 25,
@@ -300,29 +332,36 @@ const styles = StyleSheet.create({
   },
   itemCopy: {
     flex: 1,
+    minWidth: 0,
   },
   itemTitle: {
     fontFamily: fontFamily.bold,
     color: colors.ink,
     fontSize: 14,
+    lineHeight: 19,
   },
   itemBody: {
     fontFamily: fontFamily.regular,
     color: colors.text,
     fontSize: 12,
     marginTop: 4,
-    lineHeight: 17,
+    lineHeight: 18,
+    flexShrink: 1,
   },
   itemTime: {
     fontFamily: fontFamily.medium,
     color: colors.muted,
     fontSize: 11,
+    lineHeight: 16,
+    flexShrink: 0,
+    marginTop: 2,
   },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 30,
+    paddingHorizontal: 32,
+    paddingVertical: 48,
   },
   emptyIcon: {
     width: 72,
@@ -331,19 +370,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#effcf6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   emptyTitle: {
     fontFamily: fontFamily.bold,
     color: colors.ink,
     fontSize: 18,
+    lineHeight: 24,
   },
   emptyBody: {
     fontFamily: fontFamily.regular,
     color: colors.muted,
     fontSize: 13,
-    marginTop: 6,
+    marginTop: 8,
     textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 260,
   },
 });
-

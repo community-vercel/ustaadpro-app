@@ -1198,7 +1198,11 @@ export function BookingsTab(): React.JSX.Element {
                     />
                   </View>
                   <View style={styles.orderHeadCopy}>
-                    <Text style={styles.orderId}>{order.id}</Text>
+                    <Text style={styles.orderId} numberOfLines={1}>
+                      {order.items[0]?.service.selectedWorkTitle || order.items[0]?.service.title 
+                        ? `Service booking (${order.items[0].service.selectedWorkTitle || order.items[0].service.title})` 
+                        : 'Service booking'}
+                    </Text>
                     <Text style={styles.orderMeta}>{order.bookedFor}</Text>
                   </View>
                   <View style={[styles.status, {backgroundColor: status.bg}]}>

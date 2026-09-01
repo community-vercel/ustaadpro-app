@@ -4,6 +4,8 @@ import {AuthStackParamList} from '@/navigation/types';
 import {OnboardingScreen} from '@/screens/auth/OnboardingScreen';
 import {LoginScreen} from '@/screens/auth/LoginScreen';
 import {SignupScreen} from '@/screens/auth/SignupScreen';
+import {SetPinScreen} from '@/screens/auth/SetPinScreen';
+import {PinLoginScreen} from '@/screens/auth/PinLoginScreen';
 import {useAppStore} from '@/store/useAppStore';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -16,6 +18,8 @@ export function AuthNavigator(): React.JSX.Element {
       {!isOnboarded && <Stack.Screen name="Onboarding" component={OnboardingScreen} />}
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="SetPin" component={SetPinScreen} />
+      <Stack.Screen name="PinLogin" component={PinLoginScreen} />
     </Stack.Navigator>
   );
 }

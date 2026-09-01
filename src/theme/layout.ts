@@ -4,6 +4,7 @@ export const rounded = {
   md: 12,     // 0.75rem * 16px
   lg: 16,     // 1rem * 16px
   xl: 24,     // 1.5rem * 16px
+  '2xl': 32,  // 2rem * 16px
   full: 9999,
 };
 

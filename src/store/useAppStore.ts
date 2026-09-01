@@ -1,5 +1,6 @@
-import {create} from 'zustand';
+import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
 import {
   AppSettings,
   CartItem,
@@ -17,7 +18,7 @@ import {
   User,
   UserAddress,
 } from '@/types/models';
-import {apiClient, resolveApiAssetUrl} from '@/api/client';
+import { apiClient, resolveApiAssetUrl } from '@/api/client';
 
 const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_SESSION_KEY = 'auth_session';
@@ -30,21 +31,21 @@ const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 let ordersRequest: Promise<void> | null = null;
 let lastOrdersFingerprint = '';
 
-const LEGACY_CATEGORY_ALIASES: Record<string, {id: string; title: string} | null> = {
-  'ac-services': {id: 'hvac', title: 'HVAC'},
-  hvac: {id: 'hvac', title: 'HVAC'},
-  cleaning: {id: 'home-services', title: 'Home Services'},
-  'cleaning-service': {id: 'home-services', title: 'Home Services'},
-  'home-cleaning': {id: 'home-services', title: 'Home Services'},
-  'dry-cleaning': {id: 'home-services', title: 'Home Services'},
-  'home-service': {id: 'home-services', title: 'Home Services'},
-  'home-services': {id: 'home-services', title: 'Home Services'},
-  painter: {id: 'painter', title: 'Painter'},
-  painters: {id: 'painter', title: 'Painter'},
-  plumber: {id: 'plumber', title: 'Plumber'},
-  plumbers: {id: 'plumber', title: 'Plumber'},
-  welder: {id: 'welder', title: 'Welder'},
-  'welder-fabricator': {id: 'welder', title: 'Welder'},
+const LEGACY_CATEGORY_ALIASES: Record<string, { id: string; title: string } | null> = {
+  'ac-services': { id: 'hvac', title: 'HVAC' },
+  hvac: { id: 'hvac', title: 'HVAC' },
+  cleaning: { id: 'home-services', title: 'Home Services' },
+  'cleaning-service': { id: 'home-services', title: 'Home Services' },
+  'home-cleaning': { id: 'home-services', title: 'Home Services' },
+  'dry-cleaning': { id: 'home-services', title: 'Home Services' },
+  'home-service': { id: 'home-services', title: 'Home Services' },
+  'home-services': { id: 'home-services', title: 'Home Services' },
+  painter: { id: 'painter', title: 'Painter' },
+  painters: { id: 'painter', title: 'Painter' },
+  plumber: { id: 'plumber', title: 'Plumber' },
+  plumbers: { id: 'plumber', title: 'Plumber' },
+  welder: { id: 'welder', title: 'Welder' },
+  'welder-fabricator': { id: 'welder', title: 'Welder' },
   subscriptions: null,
 };
 
@@ -55,7 +56,7 @@ function canonicalCategory(id?: string, title?: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
   return LEGACY_CATEGORY_ALIASES[key] === undefined
-    ? {id: id || key, title: title || id || 'Services'}
+    ? { id: id || key, title: title || id || 'Services' }
     : LEGACY_CATEGORY_ALIASES[key];
 }
 
@@ -93,11 +94,19 @@ async function refreshProfileState(setState: (partial: Partial<AppState>) => voi
   try {
     const response = await apiClient.get('/auth/profile');
     const freshUser = normalizeUser(response.data);
+
+    // Defensive check: Preserve hasPin if we already know they have a PIN, 
+    // to prevent background refreshes from temporarily wiping it out.
+    const currentHasPin = useAppStore.getState().user?.hasPin;
+    if (currentHasPin === true && freshUser.hasPin === undefined) {
+      freshUser.hasPin = true;
+    }
+
     const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
       await saveAuthSession(token, freshUser);
     }
-    setState({user: freshUser});
+    setState({ user: freshUser });
   } catch (error) {
     console.error('Profile reward refresh error:', error);
   }
@@ -119,7 +128,7 @@ interface AppState {
   subcategories: ServiceSubcategory[];
   services: ServiceItem[];
   shopProducts: ShopProduct[];
-  shopCategories: Array<{name: string; total: number}>;
+  shopCategories: Array<{ name: string; total: number }>;
   shopProductsHasMore: boolean;
   shopProductsLoading: boolean;
   shopProductsLoadingMore: boolean;
@@ -129,14 +138,16 @@ interface AppState {
   pendingPaymentOrderId: string | null;
   shopCartOpenRequestId: number;
   locationPromptVisible: boolean;
+  biometricEnabled: boolean;
+  biometricPhone: string | null;
 
   hydrateAppState: () => Promise<void>;
   completeOnboarding: () => void;
   continueAsGuest: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  loginWithPhone: (phone: string) => Promise<void>;
-  requestLoginOtp: (payload: {phone: string}) => Promise<void>;
-  verifyLoginOtp: (payload: {phone: string; code: string}) => Promise<void>;
+  loginWithPhone: (phone: string) => Promise<{ requiresPin: boolean; phone: string } | void>;
+  requestLoginOtp: (payload: { phone: string }) => Promise<void>;
+  verifyLoginOtp: (payload: { phone: string; code: string }) => Promise<void>;
   requestPasswordResetOtp: (payload: {
     channel: 'email' | 'phone';
     email?: string;
@@ -163,11 +174,20 @@ interface AppState {
     verificationChannel?: 'email' | 'phone';
   }) => Promise<void>;
   logout: () => Promise<void>;
+  completeSignup: () => Promise<void>;
+
+  setPinAction: (pin: string) => Promise<void>;
+  checkPinAction: (pin: string) => Promise<boolean>;
+  verifyPinAction: (phone: string, pin: string) => Promise<void>;
+  requestPinResetOtpAction: (phone: string) => Promise<void>;
+  resetPinWithOtpAction: (phone: string, code: string, newPin: string) => Promise<void>;
+  enableBiometric: (pin: string) => Promise<void>;
+  disableBiometric: () => Promise<void>;
 
   fetchServices: () => Promise<void>;
   fetchAppContent: () => Promise<void>;
   fetchOrders: () => Promise<void>;
-  fetchShopProducts: (options?: {reset?: boolean; category?: string; search?: string}) => Promise<void>;
+  fetchShopProducts: (options?: { reset?: boolean; category?: string; search?: string }) => Promise<void>;
   fetchShopOrders: () => Promise<void>;
   fetchServiceReviews: (serviceId: string) => Promise<ServiceReview[]>;
   submitServiceReview: (payload: {
@@ -183,7 +203,7 @@ interface AppState {
       specialInstructions?: string | null;
       bookedFor?: string;
       recurringOccurrences?: number;
-      items?: Array<{serviceId: string; quantity: number}>;
+      items?: Array<{ serviceId: string; quantity: number }>;
     },
   ) => Promise<Order>;
   cancelServiceOrder: (orderId: string, cancelReason: string) => Promise<void>;
@@ -258,6 +278,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   pendingPaymentOrderId: null,
   shopCartOpenRequestId: 0,
   locationPromptVisible: false,
+  biometricEnabled: false,
+  biometricPhone: null,
   appSettings: {
     inspectionFee: 500,
     serviceTaxPercent: 12,
@@ -302,6 +324,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           : null,
         savedShopLocation: rawShopLocation ? JSON.parse(rawShopLocation) : null,
         pendingPaymentOrderId,
+        biometricEnabled: (await AsyncStorage.getItem('biometric_enabled')) === 'true',
+        biometricPhone: (await AsyncStorage.getItem('biometric_phone')) || null,
       };
 
       if (token && rawSession) {
@@ -323,12 +347,12 @@ export const useAppStore = create<AppState>((set, get) => ({
                   expiresAt: session.expiresAt,
                 }),
               );
-              set({user: freshUser});
+              set({ user: freshUser });
             })
             .catch(error => {
               console.error('Session profile refresh error:', error);
               void clearAuthSession();
-              set({isAuthenticated: false, user: null});
+              set({ isAuthenticated: false, user: null });
             });
         } else {
           await clearAuthSession();
@@ -348,7 +372,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Hydrate app state error:', error);
       await clearAuthSession();
-      set({isAuthenticated: false, user: null});
+      set({ isAuthenticated: false, user: null });
     }
   },
 
@@ -356,7 +380,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const raw = await AsyncStorage.getItem('push_notifications');
       const notifications = raw ? (JSON.parse(raw) as AppNotification[]) : [];
-      set({notifications: notifications.sort((a, b) => b.createdAt.localeCompare(a.createdAt))});
+      set({ notifications: notifications.sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
     } catch (error) {
       console.error('Hydrate notifications error:', error);
     }
@@ -377,7 +401,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       let nextNotifications: AppNotification[] = [];
       set(state => {
         nextNotifications = [nextNotification, ...state.notifications].slice(0, 100);
-        return {notifications: nextNotifications};
+        return { notifications: nextNotifications };
       });
       await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
     } catch (error) {
@@ -390,9 +414,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       let nextNotifications: AppNotification[] = [];
       set(state => {
         nextNotifications = state.notifications.map(item =>
-          item.id === id ? {...item, read: true} : item,
+          item.id === id ? { ...item, read: true } : item,
         );
-        return {notifications: nextNotifications};
+        return { notifications: nextNotifications };
       });
       await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
     } catch (error) {
@@ -401,22 +425,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setPendingPaymentOrderId: async orderId => {
-    set({pendingPaymentOrderId: orderId});
+    set({ pendingPaymentOrderId: orderId });
     if (orderId) {
       await AsyncStorage.setItem(PENDING_PAYMENT_ORDER_ID_KEY, orderId);
     } else {
       await AsyncStorage.removeItem(PENDING_PAYMENT_ORDER_ID_KEY);
     }
   },
-  requestOpenShopCart: () => set({shopCartOpenRequestId: Date.now()}),
-  setLocationPromptVisible: visible => set({locationPromptVisible: visible}),
+  requestOpenShopCart: () => set({ shopCartOpenRequestId: Date.now() }),
+  setLocationPromptVisible: visible => set({ locationPromptVisible: visible }),
 
   markAllNotificationsRead: async () => {
     try {
       let nextNotifications: AppNotification[] = [];
       set(state => {
-        nextNotifications = state.notifications.map(item => ({...item, read: true}));
-        return {notifications: nextNotifications};
+        nextNotifications = state.notifications.map(item => ({ ...item, read: true }));
+        return { notifications: nextNotifications };
       });
       await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
     } catch (error) {
@@ -426,7 +450,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   completeOnboarding: () => {
     void AsyncStorage.setItem('onboarding_complete', 'true');
-    set({isOnboarded: true});
+    set({ isOnboarded: true });
   },
 
   continueAsGuest: async () => {
@@ -449,8 +473,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   login: async (email, password) => {
     try {
-      const response = await apiClient.post('/auth/login', {email, password});
-      const {token} = response.data;
+      const response = await apiClient.post('/auth/login', { email, password });
+      const { token } = response.data;
       const user = normalizeUser(response.data.user);
       await saveAuthSession(token, user);
 
@@ -477,8 +501,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   loginWithPhone: async phone => {
     try {
-      const response = await apiClient.post('/auth/login-phone', {phone});
-      const {token} = response.data;
+      const response = await apiClient.post('/auth/login-phone', { phone });
+
+      // If user has PIN set, backend returns requiresPin: true
+      if (response.data.requiresPin) {
+        return { requiresPin: true, phone };
+      }
+
+      const { token } = response.data;
       const user = normalizeUser(response.data.user);
       await saveAuthSession(token, user);
 
@@ -516,7 +546,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   verifyLoginOtp: async payload => {
     try {
       const response = await apiClient.post('/auth/verify-login-otp', payload);
-      const {token} = response.data;
+      const { token } = response.data;
       const user = normalizeUser(response.data.user);
       await saveAuthSession(token, user);
 
@@ -571,7 +601,95 @@ export const useAppStore = create<AppState>((set, get) => ({
   verifySignupOtp: async payload => {
     try {
       const response = await apiClient.post('/auth/verify-signup-otp', payload);
-      const {token} = response.data;
+      const { token } = response.data;
+      const user = normalizeUser(response.data.user);
+      await saveAuthSession(token, user);
+
+      // Don't set isAuthenticated yet — let the flow go through PIN setup first.
+      // The screen will call completeSignup after PIN is set or skipped.
+      set({
+        isGuest: false,
+        user,
+        orders: [],
+        shopOrders: [],
+        addresses: [],
+      });
+      lastOrdersFingerprint = '';
+      ordersRequest = null;
+    } catch (error) {
+      console.error('Signup OTP verification error:', error);
+      throw error;
+    }
+  },
+
+  completeSignup: async () => {
+    set({ isAuthenticated: true });
+    await Promise.all([
+      get().fetchOrders(),
+      get().fetchShopOrders(),
+      get().fetchAddresses(),
+    ]);
+  },
+
+  logout: async () => {
+    await clearAuthSession();
+    await AsyncStorage.removeItem(GUEST_SESSION_KEY);
+    // NOTE: Intentionally keep biometric_enabled and biometric_phone intact
+    // so the user can log back in with fingerprint on the login screen.
+    // Biometric is only cleared when the user explicitly disables it from Profile.
+    lastOrdersFingerprint = '';
+    ordersRequest = null;
+    const biometricEnabled = useAppStore.getState().biometricEnabled;
+    const biometricPhone = useAppStore.getState().biometricPhone;
+    set({
+      isAuthenticated: false,
+      isGuest: false,
+      user: null,
+      cart: [],
+      shopCart: [],
+      orders: [],
+      shopOrders: [],
+      addresses: [],
+      // Preserve biometric state so fingerprint login works after logout
+      biometricEnabled,
+      biometricPhone,
+    });
+  },
+
+  setPinAction: async (pin: string) => {
+    try {
+      await apiClient.post('/auth/set-pin', { pin });
+      // Update in-memory user state so profile UI reflects the change immediately
+      const currentUser = get().user;
+      if (currentUser) {
+        const updatedUser = { ...currentUser, hasPin: true };
+        // Also persist to AsyncStorage so hasPin survives app restarts
+        const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+        if (token) {
+          await saveAuthSession(token, updatedUser);
+        }
+        set({ user: updatedUser });
+      }
+    } catch (error) {
+      console.error('Set PIN error:', error);
+      throw error;
+    }
+  },
+
+  checkPinAction: async (pin: string) => {
+    try {
+      const response = await apiClient.post('/auth/check-pin', { pin });
+      return response.data.valid === true;
+    } catch (error) {
+      console.error('Check PIN error:', error);
+      throw error;
+    }
+  },
+
+  verifyPinAction: async (phone: string, pin: string) => {
+    try {
+      const response = await apiClient.post('/auth/verify-pin', { phone, pin });
+      const { token } = response.data;
       const user = normalizeUser(response.data.user);
       await saveAuthSession(token, user);
 
@@ -591,26 +709,58 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().fetchAddresses(),
       ]);
     } catch (error) {
-      console.error('Signup OTP verification error:', error);
+      console.error('Verify PIN error:', error);
       throw error;
     }
   },
 
-  logout: async () => {
-    await clearAuthSession();
-    await AsyncStorage.removeItem(GUEST_SESSION_KEY);
-    lastOrdersFingerprint = '';
-    ordersRequest = null;
-    set({
-      isAuthenticated: false,
-      isGuest: false,
-      user: null,
-      cart: [],
-      shopCart: [],
-      orders: [],
-      shopOrders: [],
-      addresses: [],
-    });
+  requestPinResetOtpAction: async (phone: string) => {
+    try {
+      await apiClient.post('/auth/forgot-pin/request-otp', { phone });
+    } catch (error) {
+      console.error('PIN reset OTP request error:', error);
+      throw error;
+    }
+  },
+
+  resetPinWithOtpAction: async (phone: string, code: string, newPin: string) => {
+    try {
+      await apiClient.post('/auth/forgot-pin/reset', { phone, code, newPin });
+    } catch (error) {
+      console.error('PIN reset error:', error);
+      throw error;
+    }
+  },
+
+  enableBiometric: async (pin: string) => {
+    try {
+      const phone = get().user?.phone ?? '';
+      // Store the user's PIN securely — the Keychain will require biometric auth to retrieve it
+      await Keychain.setGenericPassword('ustaadpro_user', pin, {
+        accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+        accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED,
+        authenticationType: Keychain.AUTHENTICATION_TYPE.BIOMETRICS,
+        service: 'com.ustaadpro.biometric',
+      });
+      await AsyncStorage.setItem('biometric_enabled', 'true');
+      await AsyncStorage.setItem('biometric_phone', phone);
+      set({ biometricEnabled: true, biometricPhone: phone });
+    } catch (error) {
+      console.error('Enable biometric error:', error);
+      throw error;
+    }
+  },
+
+  disableBiometric: async () => {
+    try {
+      await Keychain.resetGenericPassword({ service: 'com.ustaadpro.biometric' });
+      await AsyncStorage.removeItem('biometric_enabled');
+      await AsyncStorage.removeItem('biometric_phone');
+      set({ biometricEnabled: false, biometricPhone: null });
+    } catch (error) {
+      console.error('Disable biometric error:', error);
+      throw error;
+    }
   },
 
   fetchServices: async () => {
@@ -650,7 +800,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         imageUrl: resolveApiAssetUrl(s.imageUrl || s.image_url || ''),
         detailDescription: s.detailDescription || s.detail_description || s.description,
         details: s.details || [],
-        workPrices: (s.workPrices || s.work_prices || []).map((work: any) => ({...work, imageUrl: resolveApiAssetUrl(work.imageUrl || work.image_url || ''), price: Number(work.price || 0)})),
+        workPrices: (s.workPrices || s.work_prices || []).map((work: any) => ({ ...work, imageUrl: resolveApiAssetUrl(work.imageUrl || work.image_url || ''), price: Number(work.price || 0) })),
         originalPrice: Number(s.originalPrice ?? s.original_price ?? 0),
         price: Number(s.price || 0),
       }));
@@ -661,7 +811,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const uniqueSubcategories = subcategories.filter(s => { if (seenSubs.has(s.id)) return false; seenSubs.add(s.id); return true; });
       const seenSvcs = new Set<string>();
       const uniqueServices = services.filter(s => { if (seenSvcs.has(s.id)) return false; seenSvcs.add(s.id); return true; });
-      set({categories: uniqueCategories, subcategories: uniqueSubcategories, services: uniqueServices});
+      set({ categories: uniqueCategories, subcategories: uniqueSubcategories, services: uniqueServices });
     } catch (error) {
       console.error('Fetch services error:', error);
     }
@@ -694,8 +844,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             '+923001234567',
           shippingCost: Number(
             settingsResponse.data.shippingCost ??
-              settingsResponse.data.shipping_cost ??
-              0,
+            settingsResponse.data.shipping_cost ??
+            0,
           ),
           rewardEnabled:
             settingsResponse.data.rewardEnabled ??
@@ -703,35 +853,35 @@ export const useAppStore = create<AppState>((set, get) => ({
             true,
           rewardPointValue: Number(
             settingsResponse.data.rewardPointValue ??
-              settingsResponse.data.reward_point_value ??
-              25,
+            settingsResponse.data.reward_point_value ??
+            25,
           ),
           rewardMinimumRedeem: Number(
             settingsResponse.data.rewardMinimumRedeem ??
-              settingsResponse.data.reward_minimum_redeem ??
-              100,
+            settingsResponse.data.reward_minimum_redeem ??
+            100,
           ),
           serviceRewardPointsOnCompletion: Number(
             settingsResponse.data.serviceRewardPointsOnCompletion ??
-              settingsResponse.data.service_reward_points_on_completion ??
-              settingsResponse.data.rewardPointsPerBooking ??
-              settingsResponse.data.reward_points_per_booking ??
-              1,
+            settingsResponse.data.service_reward_points_on_completion ??
+            settingsResponse.data.rewardPointsPerBooking ??
+            settingsResponse.data.reward_points_per_booking ??
+            1,
           ),
           serviceRewardMaxDiscountPercent: Number(
             settingsResponse.data.serviceRewardMaxDiscountPercent ??
-              settingsResponse.data.service_reward_max_discount_percent ??
-              10,
+            settingsResponse.data.service_reward_max_discount_percent ??
+            10,
           ),
           shopRewardEarnPercent: Number(
             settingsResponse.data.shopRewardEarnPercent ??
-              settingsResponse.data.shop_reward_earn_percent ??
-              0.5,
+            settingsResponse.data.shop_reward_earn_percent ??
+            0.5,
           ),
           shopRewardMaxDiscountPercent: Number(
             settingsResponse.data.shopRewardMaxDiscountPercent ??
-              settingsResponse.data.shop_reward_max_discount_percent ??
-              5,
+            settingsResponse.data.shop_reward_max_discount_percent ??
+            5,
           ),
         },
       });
@@ -743,7 +893,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchOrders: async () => {
     if (!get().user) {
       lastOrdersFingerprint = '';
-      set({orders: []});
+      set({ orders: [] });
       return;
     }
     if (ordersRequest) {
@@ -758,17 +908,17 @@ export const useAppStore = create<AppState>((set, get) => ({
             ...order,
             paymentReceipt: order.paymentReceipt
               ? {
-                  ...order.paymentReceipt,
-                  receiptUrl: String(
+                ...order.paymentReceipt,
+                receiptUrl: String(
+                  order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
+                ).startsWith('data:image/')
+                  ? resolveApiAssetUrl(
+                    `/api/orders/${encodeURIComponent(order.id)}/receipts/${order.paymentReceipt.id}/image`,
+                  )
+                  : resolveApiAssetUrl(
                     order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
-                  ).startsWith('data:image/')
-                    ? resolveApiAssetUrl(
-                        `/api/orders/${encodeURIComponent(order.id)}/receipts/${order.paymentReceipt.id}/image`,
-                      )
-                    : resolveApiAssetUrl(
-                        order.paymentReceipt.receiptUrl || order.paymentReceipt.receipt_url || '',
-                      ),
-                }
+                  ),
+              }
               : null,
             paymentReceipts: (order.paymentReceipts || order.payment_receipts || []).map(
               (receipt: any) => ({
@@ -777,11 +927,11 @@ export const useAppStore = create<AppState>((set, get) => ({
                   receipt.receiptUrl || receipt.receipt_url || '',
                 ).startsWith('data:image/')
                   ? resolveApiAssetUrl(
-                      `/api/orders/${encodeURIComponent(order.id)}/receipts/${receipt.id}/image`,
-                    )
+                    `/api/orders/${encodeURIComponent(order.id)}/receipts/${receipt.id}/image`,
+                  )
                   : resolveApiAssetUrl(
-                      receipt.receiptUrl || receipt.receipt_url || '',
-                    ),
+                    receipt.receiptUrl || receipt.receipt_url || '',
+                  ),
               }),
             ),
           }),
@@ -790,7 +940,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const fingerprint = `${userId}:${JSON.stringify(orders)}`;
         if (fingerprint !== lastOrdersFingerprint) {
           lastOrdersFingerprint = fingerprint;
-          set({orders});
+          set({ orders });
           void refreshProfileState(set);
         }
       } catch (error) {
@@ -807,7 +957,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   fetchShopProducts: async (options = {}) => {
     const pageSize = 15;
-    const {reset = false, category = 'All', search = ''} = options;
+    const { reset = false, category = 'All', search = '' } = options;
     const state = get();
 
     if (!reset && (state.shopProductsLoadingMore || !state.shopProductsHasMore)) {
@@ -816,14 +966,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set(
       reset
-        ? {shopProductsLoading: true, shopProductsHasMore: true}
-        : {shopProductsLoadingMore: true},
+        ? { shopProductsLoading: true, shopProductsHasMore: true }
+        : { shopProductsLoadingMore: true },
     );
 
     try {
       const offset = reset ? 0 : get().shopProducts.length;
       const response = await apiClient.get('/shop/products', {
-        params: {limit: pageSize, offset, category, ...(search ? {search} : {})},
+        params: { limit: pageSize, offset, category, ...(search ? { search } : {}) },
       });
       const payload = response.data;
       const rawProducts = Array.isArray(payload)
@@ -833,9 +983,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           : [];
       const categories = Array.isArray(payload?.categories)
         ? payload.categories.map((item: any) => ({
-            name: String(item.name || item.category || 'General'),
-            total: Number(item.total || 0),
-          }))
+          name: String(item.name || item.category || 'General'),
+          total: Number(item.total || 0),
+        }))
         : [];
       const products: ShopProduct[] = rawProducts.map((product: any) => ({
         ...product,
@@ -864,20 +1014,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       });
     } catch (error) {
-      set({shopProductsLoading: false, shopProductsLoadingMore: false});
+      set({ shopProductsLoading: false, shopProductsLoadingMore: false });
       console.error('Fetch shop products error:', error);
     }
   },
 
   fetchShopOrders: async () => {
     if (!get().user) {
-      set({shopOrders: []});
+      set({ shopOrders: [] });
       return;
     }
 
     try {
       const response = await apiClient.get('/shop/orders');
-      set({shopOrders: response.data});
+      set({ shopOrders: response.data });
       await refreshProfileState(set);
     } catch (error) {
       console.error('Fetch shop orders error:', error);
@@ -911,7 +1061,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   cancelServiceOrder: async (orderId, cancelReason) => {
-    await apiClient.patch('/orders/' + orderId + '/cancel', {cancelReason});
+    await apiClient.patch('/orders/' + orderId + '/cancel', { cancelReason });
     // The cancel endpoint returns an acknowledgement, not a complete Order.
     // Reload the populated order to keep Bookings rendering safely.
     await get().fetchOrders();
@@ -933,10 +1083,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       shopOrders: state.shopOrders.map(order =>
         order.id === orderId
           ? {
-              ...order,
-              status: response.data.status || 'cancelled',
-              cancelReason: response.data.cancelReason || cancelReason,
-            }
+            ...order,
+            status: response.data.status || 'cancelled',
+            cancelReason: response.data.cancelReason || cancelReason,
+          }
           : order,
       ),
     }));
@@ -945,13 +1095,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchAddresses: async () => {
     if (!get().user) {
-      set({addresses: []});
+      set({ addresses: [] });
       return;
     }
 
     try {
       const response = await apiClient.get('/addresses');
-      set({addresses: response.data});
+      set({ addresses: response.data });
     } catch (error) {
       console.error('Fetch addresses error:', error);
     }
@@ -960,7 +1110,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addAddress: async payload => {
     const response = await apiClient.post('/addresses', payload);
     const address = response.data;
-    set(state => ({addresses: [address, ...state.addresses]}));
+    set(state => ({ addresses: [address, ...state.addresses] }));
     return address;
   },
 
@@ -969,7 +1119,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const address = response.data;
     set(state => ({
       addresses: state.addresses.map(item =>
-        item.id === id ? {...item, ...address} : item,
+        item.id === id ? { ...item, ...address } : item,
       ),
     }));
     return address;
@@ -981,7 +1131,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } else {
       await AsyncStorage.removeItem(SERVICE_LOCATION_KEY);
     }
-    set({savedServiceLocation: location});
+    set({ savedServiceLocation: location });
   },
 
   setSavedShopLocation: async location => {
@@ -990,7 +1140,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } else {
       await AsyncStorage.removeItem(SHOP_LOCATION_KEY);
     }
-    set({savedShopLocation: location});
+    set({ savedShopLocation: location });
   },
 
   addToCart: service =>
@@ -1005,12 +1155,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           cart: state.cart.map(item => {
             const itemWorkKey = item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id || null;
             return item.service.id === service.id && itemWorkKey === serviceWorkKey
-              ? {...item, quantity: item.quantity + 1}
+              ? { ...item, quantity: item.quantity + 1 }
               : item;
           }),
         };
       }
-      return {cart: [...state.cart, {service, quantity: 1}]};
+      return { cart: [...state.cart, { service, quantity: 1 }] };
     }),
 
   removeFromCart: (serviceId, serviceWorkPriceId) =>
@@ -1028,10 +1178,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         const itemWorkId = item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id;
         return item.service.id === serviceId && itemWorkId === serviceWorkPriceId;
       };
-      if (safeQuantity <= 0) return {cart: state.cart.filter(item => !isTarget(item))};
-      return {cart: state.cart.map(item => isTarget(item) ? {...item, quantity: safeQuantity} : item)};
+      if (safeQuantity <= 0) return { cart: state.cart.filter(item => !isTarget(item)) };
+      return { cart: state.cart.map(item => isTarget(item) ? { ...item, quantity: safeQuantity } : item) };
     }),
-  clearCart: () => set({cart: []}),
+  clearCart: () => set({ cart: [] }),
 
   addShopProductToCart: product =>
     set(state => {
@@ -1048,12 +1198,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         return {
           shopCart: state.shopCart.map(item =>
             item.product.id === product.id
-              ? {...item, quantity: Math.min(item.quantity + 1, product.stock)}
+              ? { ...item, quantity: Math.min(item.quantity + 1, product.stock) }
               : item,
           ),
         };
       }
-      return {shopCart: [...state.shopCart, {product, quantity: 1}]};
+      return { shopCart: [...state.shopCart, { product, quantity: 1 }] };
     }),
 
   removeShopProductFromCart: productId =>
@@ -1067,22 +1217,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         quantity <= 0
           ? state.shopCart.filter(item => item.product.id !== productId)
           : state.shopCart.map(item =>
-              item.product.id === productId
-                ? {
-                    ...item,
-                    quantity: Math.min(
-                      Math.max(1, Math.floor(quantity)),
-                      Math.max(1, item.product.stock),
-                    ),
-                  }
-                : item,
-            ),
+            item.product.id === productId
+              ? {
+                ...item,
+                quantity: Math.min(
+                  Math.max(1, Math.floor(quantity)),
+                  Math.max(1, item.product.stock),
+                ),
+              }
+              : item,
+          ),
     })),
 
-  clearShopCart: () => set({shopCart: []}),
+  clearShopCart: () => set({ shopCart: [] }),
 
   checkoutShopCart: async checkoutDetails => {
-    const {shopCart, user} = get();
+    const { shopCart, user } = get();
     if (!user) {
       throw new Error('Please login to place a shopping order.');
     }
@@ -1111,14 +1261,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set(state => ({
       shopOrders: [order, ...state.shopOrders],
       shopCart: [],
-      ...(updatedUser ? {user: updatedUser} : {}),
+      ...(updatedUser ? { user: updatedUser } : {}),
     }));
     return order;
   },
 
   checkout: async checkoutDetails => {
     try {
-      const {cart, user} = get();
+      const { cart, user } = get();
       if (!user) {
         throw new Error('Please login to place a service booking.');
       }
@@ -1158,7 +1308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set(state => ({
         orders: [newOrder, ...state.orders],
         cart: [],
-        ...(updatedUser ? {user: updatedUser} : {}),
+        ...(updatedUser ? { user: updatedUser } : {}),
       }));
 
       return newOrder;

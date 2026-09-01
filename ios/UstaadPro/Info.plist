@@ -41,6 +41,8 @@
 	<string>This app uses your location to show nearby services and professionals.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app uses the microphone for voice features.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>This app requires Face ID access to let you log in securely.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app accesses your photos to let you upload images for your profile and service listings.</string>
 	<key>UIBackgroundModes</key>

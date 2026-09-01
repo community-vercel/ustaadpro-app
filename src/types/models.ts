@@ -104,6 +104,7 @@ export interface User {
   walletBalance: number;
   coins: number;
   rewardPoints: number;
+  hasPin?: boolean;
 }
 
 export interface UserAddress {

@@ -32,6 +32,8 @@ import { ShoppingOrdersScreen } from '@/screens/main/ShoppingOrdersScreen';
 import { AboutScreen } from '@/screens/main/AboutScreen';
 import { PrivacyPolicyScreen } from '@/screens/main/PrivacyPolicyScreen';
 import { ComplaintsScreen } from '@/screens/main/ComplaintsScreen';
+import { SettingsScreen } from '@/screens/main/SettingsScreen';
+import { SetPinScreen } from '@/screens/auth/SetPinScreen';
 import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme/colors';
 import { pushNotificationService } from '@/services/PushNotificationService';
@@ -726,12 +728,23 @@ export default function App(): React.JSX.Element {
                 name="Complaints"
                 component={ComplaintsScreen}
               />
+              <RootStack.Screen
+                name="Settings"
+                component={SettingsScreen}
+              />
               {isGuest && (
                 <RootStack.Screen name="Auth" component={AuthNavigator} />
               )}
             </>
           ) : (
-            <RootStack.Screen name="Auth" component={AuthNavigator} />
+            <>
+              <RootStack.Screen name="Auth" component={AuthNavigator} />
+              <RootStack.Screen
+                name="SetPin"
+                component={SetPinScreen}
+                options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+              />
+            </>
           )}
         </RootStack.Navigator>
       </NavigationContainer>

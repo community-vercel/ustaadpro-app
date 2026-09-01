@@ -10,11 +10,14 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
+  Keyboard,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {useNavigation} from '@react-navigation/native';
@@ -26,11 +29,16 @@ import {
   CheckCircle2,
   ChevronRight,
   Edit2,
+  Eye,
+  EyeOff,
+  Fingerprint,
   Gift,
   WalletCards,
+  KeyRound,
   LogOut,
   Mail,
   MapPin,
+  ShieldCheck,
   ShoppingCart,
   Trash2,
   X,
@@ -104,6 +112,29 @@ export function ProfileTab(): React.JSX.Element {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteSuccessVisible, setDeleteSuccessVisible] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinStep, setPinStep] = useState<'create' | 'verify' | 'newpin'>('create');
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinMessage, setPinMessage] = useState<{title: string; body: string; tone: 'error' | 'success'} | null>(null);
+  const [pinInputFocused, setPinInputFocused] = useState(false);
+  const setPinAction = useAppStore(state => state.setPinAction);
+  const checkPinAction = useAppStore(state => state.checkPinAction);
+  const biometricEnabled = useAppStore(state => state.biometricEnabled);
+  const enableBiometric = useAppStore(state => state.enableBiometric);
+  const disableBiometric = useAppStore(state => state.disableBiometric);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricPendingEnable, setBiometricPendingEnable] = useState(false);
+  const [biometricConfirmVisible, setBiometricConfirmVisible] = useState(false);
+
+  useEffect(() => {
+    Keychain.getSupportedBiometryType().then(type => {
+      setBiometricSupported(type !== null);
+    }).catch(() => setBiometricSupported(false));
+  }, []);
 
   useEffect(() => {
     Promise.all([fetchOrders(), fetchAddresses(), fetchAppContent()]).finally(() =>
@@ -309,6 +340,75 @@ export function ProfileTab(): React.JSX.Element {
     setPhotoPickerVisible(true);
   };
 
+  const userHasPin = Boolean(user?.hasPin);
+
+  const openPinModal = () => {
+    setPinStep(userHasPin ? 'verify' : 'create');
+    setCurrentPin('');
+    setNewPin('');
+    setShowPin(false);
+    setPinMessage(null);
+    setPinModalVisible(true);
+  };
+
+  const handleSetPin = async () => {
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinMessage({title: 'Invalid PIN', body: 'PIN must be exactly 4 digits.', tone: 'error'});
+      return;
+    }
+    setPinLoading(true);
+    try {
+      await setPinAction(newPin);
+      // Store already updated user.hasPin = true and persisted session
+      setPinMessage({title: 'PIN saved!', body: 'Your PIN has been set. Use it for quick login next time.', tone: 'success'});
+      setTimeout(() => {
+        closePinModal();
+      }, 1000);
+    } catch (error: any) {
+      setPinMessage({title: 'Failed', body: error?.response?.data?.message || error?.message || 'Could not set PIN.', tone: 'error'});
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const handleVerifyCurrentPin = async () => {
+    if (!/^\d{4}$/.test(currentPin)) {
+      setPinMessage({title: 'Invalid PIN', body: 'PIN must be exactly 4 digits.', tone: 'error'});
+      return;
+    }
+    setPinLoading(true);
+    try {
+      await checkPinAction(currentPin);
+      if (biometricPendingEnable) {
+        // User verified PIN to enable biometric — save it to Keychain now
+        await enableBiometric(currentPin);
+        setBiometricPendingEnable(false);
+        closePinModal();
+        return;
+      }
+      setPinStep('newpin');
+      setPinMessage(null);
+    } catch (error: any) {
+      setPinMessage({title: 'Wrong PIN', body: error?.response?.data?.message || 'Current PIN is incorrect.', tone: 'error'});
+      setCurrentPin('');
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const closePinModal = () => {
+    Keyboard.dismiss();
+    setTimeout(() => {
+      const hasPin = Boolean(useAppStore.getState().user?.hasPin);
+      setPinModalVisible(false);
+      setPinStep(hasPin ? 'verify' : 'create');
+      setCurrentPin('');
+      setNewPin('');
+      setShowPin(false);
+      setPinMessage(null);
+    }, 100);
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([fetchOrders(), fetchAddresses()]);
@@ -353,14 +453,12 @@ export function ProfileTab(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Modal
-        visible={Boolean(editingAddress)}
-        transparent
-        animationType="fade"
-        onRequestClose={closeAddressEditor}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      {Boolean(editingAddress) && (
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={closeAddressEditor}
+        >
+          <Pressable style={styles.modalCard} onPress={e => e.stopPropagation()}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit saved address</Text>
               <Pressable style={styles.modalClose} onPress={closeAddressEditor}>
@@ -399,21 +497,16 @@ export function ProfileTab(): React.JSX.Element {
                 {savingAddress ? 'Saving...' : 'Save address'}
               </Text>
             </Pressable>
-          </View>
-        </View>
-      </Modal>
+          </Pressable>
+        </Pressable>
+      )}
 
-      <Modal
-        visible={photoPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPhotoPickerVisible(false)}
-      >
+      {photoPickerVisible && (
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setPhotoPickerVisible(false)}
         >
-          <Pressable style={styles.photoPickerCard}>
+          <Pressable style={styles.photoPickerCard} onPress={e => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Update profile picture</Text>
             <Text style={styles.photoPickerText}>
               Take a live photo or choose one from your gallery.
@@ -435,7 +528,10 @@ export function ProfileTab(): React.JSX.Element {
             </View>
           </Pressable>
         </Pressable>
-      </Modal>
+      )}
+
+      {/* Biometric Enable Confirmation Modal */}
+
 
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -474,6 +570,7 @@ export function ProfileTab(): React.JSX.Element {
       <ScrollView
         style={{flex: 1}}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -607,6 +704,8 @@ export function ProfileTab(): React.JSX.Element {
           <ChevronRight color="#76777d" size={19} strokeWidth={2.2} />
         </Pressable>
 
+
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent bookings</Text>
           <Text style={styles.sectionMeta}>{orders.length} total</Text>
@@ -636,7 +735,7 @@ export function ProfileTab(): React.JSX.Element {
                   </View>
                   <View style={styles.bookingInfo}>
                     <Text style={styles.bookingTitle} numberOfLines={1}>
-                      {firstItem?.service.title || 'Service booking'}
+                      {firstItem?.service.title ? `Service booking (${firstItem.service.title})` : 'Service booking'}
                     </Text>
                     <Text style={styles.bookingTime}>{order.bookedFor}</Text>
                   </View>
@@ -655,7 +754,11 @@ export function ProfileTab(): React.JSX.Element {
                 </View>
 
                 <View style={styles.bookingFooter}>
-                  <Text style={styles.orderId}>{order.id}</Text>
+                  <Text style={styles.orderId} numberOfLines={1}>
+                    {firstItem?.service.selectedWorkTitle || firstItem?.service.title 
+                      ? `Service booking (${firstItem.service.selectedWorkTitle || firstItem.service.title})` 
+                      : 'Service booking'}
+                  </Text>
                   <Text style={styles.orderTotal}>
                     {formatPkr(order.total)}
                   </Text>
@@ -866,10 +969,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ba1a1a',
   },
   modalOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(11, 28, 48, 0.48)',
     justifyContent: 'center',
     paddingHorizontal: 20,
+    zIndex: 1000,
   },
   modalCard: {
     backgroundColor: '#ffffff',
@@ -996,6 +1100,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   content: {
+    flexGrow: 1,
     padding: 20,
     paddingBottom: 112,
   },
