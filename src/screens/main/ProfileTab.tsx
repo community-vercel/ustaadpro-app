@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Keychain from 'react-native-keychain';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -89,6 +89,7 @@ function profilePhotoKey(user?: {email?: string; phone?: string} | null) {
 
 export function ProfileTab(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
   const user = useAppStore(state => state.user);
   const orders = useAppStore(state => state.orders);
   const addresses = useAppStore(state => state.addresses);
@@ -452,7 +453,7 @@ export function ProfileTab(): React.JSX.Element {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       {Boolean(editingAddress) && (
         <Pressable
           style={styles.modalOverlay}
@@ -882,7 +883,7 @@ export function ProfileTab(): React.JSX.Element {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
