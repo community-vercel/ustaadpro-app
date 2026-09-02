@@ -1866,6 +1866,30 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - RNKeychain (10.0.0):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - RNReanimated (3.17.5):
     - DoubleConversion
     - glog
@@ -2106,6 +2130,7 @@ DEPENDENCIES:
   - "RNFBMessaging (from `../node_modules/@react-native-firebase/messaging`)"
   - RNFS (from `../node_modules/react-native-fs`)
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
+  - RNKeychain (from `../node_modules/react-native-keychain`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
@@ -2287,6 +2312,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-fs"
   RNGestureHandler:
     :path: "../node_modules/react-native-gesture-handler"
+  RNKeychain:
+    :path: "../node_modules/react-native-keychain"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
@@ -2387,6 +2414,7 @@ SPEC CHECKSUMS:
   RNFBMessaging: 58e648e08a3cbcbc13cb197b33b016f77b3e64df
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
   RNGestureHandler: 428d7b57ca46b96f09b79597167dda208d1ecf31
+  RNKeychain: b060a891b105741c67da179f4d88ed87960f22e7
   RNReanimated: efe63b33e23e1b5b06e5e087779eceeee742452b
   RNScreens: 586139d98cad59cc4c56443b9bd5c8b9b0b6da0e
   RNSVG: ab84f2de7dd4f2c86d01825b8a65e0ef712fc36b
@@ -2395,4 +2423,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: 689511d025e89d70088698db982b4becfdc3c099
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0
