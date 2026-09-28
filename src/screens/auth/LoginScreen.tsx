@@ -19,6 +19,7 @@ import {
   Lock,
   Mail,
   Phone,
+  ScanFace,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react-native';
@@ -64,6 +65,19 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const biometricEnabled = useAppStore(state => state.biometricEnabled);
   const biometricPhone = useAppStore(state => state.biometricPhone);
   const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometryType, setBiometryType] = useState<Keychain.BIOMETRY_TYPE | null>(null);
+
+  useEffect(() => {
+    Keychain.getSupportedBiometryType()
+      .then(setBiometryType)
+      .catch(() => setBiometryType(null));
+  }, []);
+
+  const isFaceBiometry =
+    biometryType === Keychain.BIOMETRY_TYPE.FACE_ID ||
+    biometryType === Keychain.BIOMETRY_TYPE.FACE;
+  const BiometricIcon = isFaceBiometry ? ScanFace : Fingerprint;
+  const biometricLabel = isFaceBiometry ? 'Login with Face ID' : 'Login with Fingerprint';
 
   const handleBiometricLogin = async () => {
     setBiometricLoading(true);
@@ -593,14 +607,14 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
               onPress={handleBiometricLogin}
               disabled={biometricLoading || loading}
             >
-              <Fingerprint
+              <BiometricIcon
                 color="#6545d8"
                 size={22}
                 strokeWidth={2.2}
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.biometricButtonText}>
-                {biometricLoading ? 'Verifying...' : 'Login with Fingerprint'}
+                {biometricLoading ? 'Verifying...' : biometricLabel}
               </Text>
             </Pressable>
           ) : null}
