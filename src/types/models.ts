@@ -19,7 +19,11 @@ export interface ServiceSubcategory {
   imageUrl?: string;
   webImageUrl?: string;
   mobileIconUrl?: string;
+  // Subcategories marked per_sqft make every service under them area-based.
+  pricingMode?: WorkPricingMode;
 }
+
+export type WorkPricingMode = 'fixed' | 'per_sqft';
 
 export interface ServiceWorkPrice {
   id: number;
@@ -28,6 +32,7 @@ export interface ServiceWorkPrice {
   description?: string;
   imageUrl?: string;
   price: number;
+  pricingMode?: WorkPricingMode;
   sortOrder?: number;
 }
 
@@ -53,6 +58,11 @@ export interface ServiceItem {
   selectedWorkPrice?: ServiceWorkPrice;
   selectedWorkPriceId?: number;
   selectedWorkTitle?: string;
+  allowQuantity?: boolean;
+  // Per-sqft work prices (wall texture designs): area entered by customer.
+  areaSqft?: number;
+  pricePerSqft?: number;
+  pricingMode?: WorkPricingMode;
 }
 
 export interface HomeSlide {

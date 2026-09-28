@@ -31,6 +31,7 @@ type FlatServiceItem = {
   reviews: number;
   duration: string;
   badge?: string;
+  isPerSqft?: boolean;
 };
 
 export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
@@ -90,6 +91,8 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
 
   // Flatten services into individual specific work items so each
   // work price (e.g. "Fan Installation", "Breaker Replacement") shows as its own card.
+  // Texture-design services are the exception: they keep one parent card and
+  // their sub-category designs are chosen inside the detail screen.
   const serviceList = useMemo<FlatServiceItem[]>(() => {
     if (isAllCategories) return [];
     const list: FlatServiceItem[] = [];
@@ -98,8 +101,14 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
       const dynamicWorkPrices = (service.workPrices || []).filter(
         work => work.title && Number(work.price) > 0,
       );
+      // Texture-style services (e.g. "Texture Painting") keep ONE parent card
+      // in the list. Their per-sqft sub-category designs are shown inside the
+      // detail screen, where the customer picks a design and enters the area.
+      const isTextureDesignService =
+        dynamicWorkPrices.length > 0 &&
+        dynamicWorkPrices.every(work => work.pricingMode === 'per_sqft');
 
-      if (dynamicWorkPrices.length) {
+      if (dynamicWorkPrices.length && !isTextureDesignService) {
         dynamicWorkPrices.forEach((work, index) => {
           const workId = Number(work.id ?? index);
           list.push({
@@ -121,14 +130,40 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
             reviews: service.reviews,
             duration: service.duration,
             badge: index === 0 ? service.badge : undefined,
+            isPerSqft: work.pricingMode === 'per_sqft',
           });
         });
-      } else {
-        // No work prices — show the parent service itself
+      } else if (isTextureDesignService) {
+        // Parent card shows the lowest design rate as the "from" price.
+        const rate = Math.min(
+          ...dynamicWorkPrices.map(work => Number(work.price)),
+        );
         list.push({
           id: service.id,
           workId: 0,
-          title: service.title,
+          title: `${service.title} (${formatPkr(rate)}/sq ft)`,
+          description: service.description,
+          price: rate,
+          originalPrice:
+            service.originalPrice > service.price
+              ? Math.round(rate * (service.originalPrice / service.price))
+              : rate,
+          imageUrl: service.imageUrl,
+          rating: service.rating,
+          reviews: service.reviews,
+          duration: service.duration,
+          badge: service.badge,
+          isPerSqft: true,
+        });
+      } else {
+        const isPerSqftService =
+          /\bper\s*sq/i.test(service.serviceType || '') ||
+          service.pricingMode === 'per_sqft' ||
+          subcategories.find(sub => sub.id === service.subcategoryId)?.pricingMode === 'per_sqft';
+        list.push({
+          id: service.id,
+          workId: 0,
+          title: isPerSqftService ? `${service.title} (${formatPkr(service.price)}/sq ft)` : service.title,
           description: service.description,
           price: service.price,
           originalPrice: service.originalPrice,
@@ -142,7 +177,7 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
     });
 
     return list;
-  }, [categoryServices, isAllCategories]);
+  }, [categoryServices, isAllCategories, subcategories]);
 
   useEffect(() => {
     if (!services.length) {
@@ -302,17 +337,20 @@ export function CategoryScreen({navigation, route}: Props): React.JSX.Element {
             </View>
 
             <View style={styles.priceRow}>
-              <View style={styles.priceCol}>
-                <Text style={styles.priceLabel}>Starting from</Text>
-                <View style={styles.priceWrap}>
-                  <Text style={styles.price}>{formatPkr(service.price)}</Text>
-                  {service.originalPrice > service.price && (
-                    <Text style={styles.originalPrice}>
-                      {formatPkr(service.originalPrice)}
-                    </Text>
-                  )}
-                </View>
+            <View style={styles.priceCol}>
+              <Text style={styles.priceLabel}>Starting from</Text>
+              <View style={styles.priceWrap}>
+                <Text style={styles.price}>
+                  {formatPkr(service.price)}
+                  {service.isPerSqft ? ' / sq ft' : ''}
+                </Text>
+                {service.originalPrice > service.price && (
+                  <Text style={styles.originalPrice}>
+                    {formatPkr(service.originalPrice)}
+                  </Text>
+                )}
               </View>
+            </View>
               <Pressable
                 style={styles.bookBtn}
                 onPress={() =>

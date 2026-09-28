@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
+import RNFS from 'react-native-fs';
 import {launchImageLibrary} from 'react-native-image-picker';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
@@ -22,10 +23,12 @@ import {
   ArrowLeft,
   CalendarCheck,
   CheckCircle2,
+  ClipboardPaste,
   Clock3,
   CreditCard,
   Copy,
   Edit2,
+  ImagePlus,
   MapPin,
   PackageCheck,
   Star,
@@ -162,6 +165,7 @@ export function BookingsTab(): React.JSX.Element {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const modalWasOpen = React.useRef(false);
   const [editTarget, setEditTarget] = useState<Order | null>(null);
   const [editServiceId, setEditServiceId] = useState('');
   const [editSelectedDay, setEditSelectedDay] = useState(0);
@@ -190,6 +194,7 @@ export function BookingsTab(): React.JSX.Element {
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [receiptAuthToken, setReceiptAuthToken] = useState('');
+  const [pasteReceiptError, setPasteReceiptError] = useState('');
   useEffect(() => {
     AsyncStorage.getItem('auth_token').then(token => {
       setReceiptAuthToken(token || '');
@@ -244,6 +249,11 @@ export function BookingsTab(): React.JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
+      // Skip the spurious focus event fired when a Modal is dismissed on Android.
+      if (modalWasOpen.current) {
+        modalWasOpen.current = false;
+        return;
+      }
       void fetchOrders();
     }, [fetchOrders]),
   );
@@ -259,6 +269,7 @@ export function BookingsTab(): React.JSX.Element {
     serviceId: string;
     serviceTitle: string;
   }) => {
+    modalWasOpen.current = true;
     setReviewTarget(target);
     setReviewRating(5);
     setReviewComment('');
@@ -270,6 +281,7 @@ export function BookingsTab(): React.JSX.Element {
   const openOrderEditor = (order: Order) => {
     const firstService = order.items[0]?.service;
     const schedule = parseSchedule(order.bookedFor || '', bookingDays);
+    modalWasOpen.current = true;
     setEditTarget(order);
     setEditServiceId(firstService?.id || services[0]?.id || '');
     setEditSelectedDay(schedule.selectedDay);
@@ -378,6 +390,7 @@ export function BookingsTab(): React.JSX.Element {
     }
     setPaymentTarget(order);
     setReceiptPreview(null);
+    setPasteReceiptError('');
     setPaymentModalVisible(true);
   };
 
@@ -387,6 +400,7 @@ export function BookingsTab(): React.JSX.Element {
     setPaymentModalVisible(false);
     setPaymentTarget(null);
     setReceiptPreview(null);
+    setPasteReceiptError('');
   };
   useEffect(
     () => () => {
@@ -422,21 +436,12 @@ export function BookingsTab(): React.JSX.Element {
     Clipboard.setString(EASYPAISA_ACCOUNT_NUMBER);
     Alert.alert('Copied', 'EasyPaisa account number copied successfully.');
   };
-  const handleUploadReceipt = async () => {
+  const submitReceiptImage = async (imageUri: string) => {
     if (!paymentTarget) return;
-
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      includeBase64: false,
-      selectionLimit: 1,
-    });
-
-    const asset = result.assets?.[0];
-    if (!asset?.uri) return;
 
     try {
       setSubmittingReceipt(true);
-      const compressedReceipt = await compressPaymentReceipt(asset.uri);
+      const compressedReceipt = await compressPaymentReceipt(imageUri);
       await uploadPaymentReceipt({
         orderId: paymentTarget.id,
         dataUrl: compressedReceipt.dataUrl,
@@ -468,6 +473,64 @@ export function BookingsTab(): React.JSX.Element {
       );
     } finally {
       setSubmittingReceipt(false);
+    }
+  };
+
+  const handleUploadReceipt = async () => {
+    if (!paymentTarget) return;
+
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      includeBase64: false,
+      selectionLimit: 1,
+    });
+
+    const asset = result.assets?.[0];
+    if (!asset?.uri) return;
+
+    await submitReceiptImage(asset.uri);
+  };
+
+  const handlePasteReceipt = async () => {
+    if (!paymentTarget || submittingReceipt) return;
+    setPasteReceiptError('');
+
+    try {
+      const hasImage = await Clipboard.hasImage();
+      if (!hasImage) {
+        setPasteReceiptError(
+          'No image found in clipboard. Copy a receipt image from your gallery first, then tap Paste image.',
+        );
+        return;
+      }
+
+      let base64 = await Clipboard.getImagePNG();
+      let extension = 'png';
+      if (!base64) {
+        base64 = await Clipboard.getImageJPG();
+        extension = 'jpg';
+      }
+      if (!base64) {
+        base64 = await Clipboard.getImage();
+      }
+      if (!base64) {
+        setPasteReceiptError(
+          'Could not read the copied image. Try uploading it from the gallery instead.',
+        );
+        return;
+      }
+
+      const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '');
+      const cacheDir = `${RNFS.CachesDirectoryPath}/receipt-paste`;
+      await RNFS.mkdir(cacheDir);
+      const filePath = `${cacheDir}/pasted-receipt-${Date.now()}.${extension}`;
+      await RNFS.writeFile(filePath, cleanBase64, 'base64');
+
+      await submitReceiptImage(filePath);
+    } catch (error: any) {
+      setPasteReceiptError(
+        error?.message || 'Could not paste the copied image. Please try again.',
+      );
     }
   };
   useEffect(() => {
@@ -570,13 +633,18 @@ export function BookingsTab(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
+      {reviewTarget ? (
+      <View style={styles.modalHostLayer}>
       <Modal
-        visible={Boolean(reviewTarget)}
+        visible
         transparent
         animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setReviewTarget(null)}
       >
-        <View style={styles.reviewOverlay}>
+        <View style={styles.reviewCenterOverlay}>
           <View style={styles.reviewModal}>
             <Text style={styles.reviewModalTitle}>Review service</Text>
             <Text style={styles.reviewModalSubtitle}>
@@ -626,10 +694,15 @@ export function BookingsTab(): React.JSX.Element {
           </View>
         </View>
       </Modal>
+      </View>
+      ) : null}
       <Modal
         visible={Boolean(editTarget)}
         transparent
         animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={closeOrderEditor}
       >
         <View style={styles.reviewOverlay}><ScrollView
@@ -931,6 +1004,9 @@ export function BookingsTab(): React.JSX.Element {
         visible={Boolean(cancelTarget)}
         transparent
         animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={closeCancelModal}
       >
         <View style={styles.reviewOverlay}>
@@ -1039,15 +1115,43 @@ export function BookingsTab(): React.JSX.Element {
               </View>
             ) : null}
             {!isCashPayment(paymentTarget?.paymentMethod) ? (
-              <Pressable
-                style={[styles.paymentUploadOnlyButton, submittingReceipt && styles.reviewSubmitDisabled]}
-                onPress={handleUploadReceipt}
-                disabled={submittingReceipt}
-              >
-                <Text style={styles.reviewSubmitText}>
-                  {submittingReceipt ? 'Uploading...' : isRemainingBalancePayment ? 'Upload remaining receipt' : hasUploadedReceipt ? 'Reupload advance receipt' : 'Upload advance receipt'}
-                </Text>
-              </Pressable>
+              <View style={styles.paymentReceiptActions}>
+                <Pressable
+                  style={[
+                    styles.paymentPasteButton,
+                    submittingReceipt && styles.reviewSubmitDisabled,
+                  ]}
+                  onPress={handlePasteReceipt}
+                  disabled={submittingReceipt}
+                >
+                  <ClipboardPaste color="#0b1c30" size={16} strokeWidth={2.2} />
+                  <Text style={styles.paymentPasteButtonText}>
+                    {submittingReceipt ? 'Pasting...' : 'Paste image'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.paymentUploadButton,
+                    submittingReceipt && styles.reviewSubmitDisabled,
+                  ]}
+                  onPress={handleUploadReceipt}
+                  disabled={submittingReceipt}
+                >
+                  <ImagePlus color="#ffffff" size={16} strokeWidth={2.2} />
+                  <Text style={styles.reviewSubmitText}>
+                    {submittingReceipt
+                      ? 'Uploading...'
+                      : isRemainingBalancePayment
+                        ? 'Upload remaining receipt'
+                        : hasUploadedReceipt
+                          ? 'Reupload advance receipt'
+                          : 'Upload receipt'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {!isCashPayment(paymentTarget?.paymentMethod) && pasteReceiptError ? (
+              <Text style={styles.paymentPasteError}>{pasteReceiptError}</Text>
             ) : null}
           </View>
         </View>
@@ -1181,11 +1285,12 @@ export function BookingsTab(): React.JSX.Element {
         ) : (
           filteredOrders.map(order => {
             const status = statusMeta[order.status] || statusMeta.confirmed;
-            const orderItems = Array.isArray(order.items) ? order.items.filter(item => item && item.service) : [];
+            const orderItems = Array.isArray(order.items) ? order.items.filter(item => item != null) : [];
             const serviceCount = orderItems.reduce(
-              (sum, item) => sum + item.quantity,
+              (sum, item) => sum + (item.quantity || 1),
               0,
             );
+            const hasUnreviewed = order.status === 'completed' && (orderItems.length === 0 || orderItems.some(item => !item.review));
 
             return (
               <View key={order.id} style={styles.orderCard}>
@@ -1199,8 +1304,8 @@ export function BookingsTab(): React.JSX.Element {
                   </View>
                   <View style={styles.orderHeadCopy}>
                     <Text style={styles.orderId} numberOfLines={1}>
-                      {order.items[0]?.service.selectedWorkTitle || order.items[0]?.service.title 
-                        ? `Service booking (${order.items[0].service.selectedWorkTitle || order.items[0].service.title})` 
+                      {order.items[0]?.service?.selectedWorkTitle || order.items[0]?.service?.title 
+                        ? `Service booking (${order.items[0]?.service?.selectedWorkTitle || order.items[0]?.service?.title})` 
                         : 'Service booking'}
                     </Text>
                     <Text style={styles.orderMeta}>{order.bookedFor}</Text>
@@ -1213,14 +1318,14 @@ export function BookingsTab(): React.JSX.Element {
                 </View>
 
                 <View style={styles.serviceBox}>
-                  {orderItems.map(item => (
-                    <View key={item.service.id} style={styles.serviceItemBlock}>
+                  {orderItems.map((item, idx) => (
+                    <View key={item?.service?.id || idx} style={styles.serviceItemBlock}>
                       <View style={styles.serviceRow}>
                         <Text style={styles.itemText} numberOfLines={1}>
-                          {item.quantity}x {item.service.selectedWorkTitle || item.service.title}
+                          {(item.quantity || 1)}x {item.service?.selectedWorkTitle || item.service?.title || 'Service'}
                         </Text>
                         <Text style={styles.itemPrice}>
-                          {formatPkr(item.service.price * item.quantity)}
+                          {formatPkr((item.service?.price || 0) * (item.quantity || 1))}
                         </Text>
                       </View>
                       {item.review ? (
@@ -1235,21 +1340,21 @@ export function BookingsTab(): React.JSX.Element {
                           ))}
                           <Text style={styles.reviewedText}>Reviewed</Text>
                         </View>
-                      ) : (
+                      ) : order.status === 'completed' ? (
                         <Pressable
                           style={styles.reviewButton}
                           onPress={() =>
                             openReview({
                               orderId: order.id,
-                              serviceId: item.service.id,
-                              serviceTitle: item.service.selectedWorkTitle || item.service.title,
+                              serviceId: item.service?.id || order.id,
+                              serviceTitle: item.service?.selectedWorkTitle || item.service?.title || 'Service',
                             })
                           }
                         >
                           <Star color="#006c49" size={14} />
                           <Text style={styles.reviewButtonText}>Review</Text>
                         </Pressable>
-                      )}
+                      ) : null}
                     </View>
                   ))}
                 </View>
@@ -1353,6 +1458,24 @@ export function BookingsTab(): React.JSX.Element {
                     </Pressable>
                   </View>
                 )}
+
+                {/* Add Review button — shown at card level for completed orders */}
+                {hasUnreviewed && (
+                  <Pressable
+                    style={styles.addReviewBtn}
+                    onPress={() =>
+                      openReview({
+                        orderId: order.id,
+                        serviceId: orderItems.find(i => !i.review)?.service?.id || order.id,
+                        serviceTitle: orderItems.find(i => !i.review)?.service?.selectedWorkTitle ||
+                          orderItems.find(i => !i.review)?.service?.title || 'Service',
+                      })
+                    }
+                  >
+                    <Star color="#ffffff" size={14} />
+                    <Text style={styles.addReviewBtnText}>Add Review</Text>
+                  </Pressable>
+                )}
               </View>
             );
           })
@@ -1377,6 +1500,10 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,
   },
+  modalHostLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 101,
+  },
   paymentSuccessOverlay: {
     flex: 1,
     backgroundColor: 'rgba(11,28,48,0.42)',
@@ -1388,6 +1515,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(11,28,48,0.42)',
     justifyContent: 'flex-end',
+    padding: 16,
+  },
+  reviewCenterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(11,28,48,0.42)',
+    justifyContent: 'center',
     padding: 16,
   },
   reviewModal: {
@@ -1814,13 +1947,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  paymentUploadOnlyButton: {
-    height: 50,
+  paymentReceiptActions: {
+    flexDirection: 'row',
+    gap: 10,
     marginTop: 20,
+  },
+  paymentPasteButton: {
+    height: 50,
+    flex: 1,
+    borderRadius: rounded.default,
+    borderWidth: 1.5,
+    borderColor: colors.authDark,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  paymentPasteButtonText: {
+    fontFamily: fontFamily.bold,
+    color: colors.ink,
+    fontSize: 14,
+  },
+  paymentUploadButton: {
+    height: 50,
+    flex: 1.4,
     borderRadius: rounded.default,
     backgroundColor: colors.authDark,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  paymentPasteError: {
+    fontFamily: fontFamily.regular,
+    color: '#ba1a1a',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 10,
   },
   reviewSubmitDisabled: {
     opacity: 0.7,
@@ -2267,6 +2431,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelSubmitText: {
+    fontFamily: fontFamily.bold,
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  addReviewBtn: {
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: rounded.default,
+    backgroundColor: '#006c49',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addReviewBtnText: {
     fontFamily: fontFamily.bold,
     color: '#ffffff',
     fontSize: 14,

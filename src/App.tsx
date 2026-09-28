@@ -37,7 +37,7 @@ import { SetPinScreen } from '@/screens/auth/SetPinScreen';
 import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme/colors';
 import { pushNotificationService } from '@/services/PushNotificationService';
-import {apiClient} from '@/api/client';
+import { apiClient } from '@/api/client';
 import { InAppNotificationBanner } from '@/components/InAppNotificationBanner';
 import {
   locateCurrentAddress,
@@ -153,7 +153,7 @@ function LocationTileMap({
       setCenterLocation(location);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.latitude, location.longitude]); 
+  }, [location.latitude, location.longitude]);
 
   const centerTileX = lonToTileX(centerLocation.longitude);
   const centerTileY = latToTileY(centerLocation.latitude);
@@ -391,7 +391,7 @@ export default function App(): React.JSX.Element {
     if (!pendingPaymentOrderId || !rootNavigationRef.isReady()) {
       return;
     }
-    rootNavigationRef.navigate('Main', {screen: 'Bookings'});
+    rootNavigationRef.navigate('Main', { screen: 'Bookings' });
   }, [pendingPaymentOrderId]);
   const appIsOpen = isAuthenticated || isGuest;
   const locationPromptSeenKey = `${LOCATION_PROMPT_SEEN_KEY}:${user?.email || user?.phone || 'guest'
@@ -703,7 +703,7 @@ export default function App(): React.JSX.Element {
         onReady={() => {
           const pendingOrderId = useAppStore.getState().pendingPaymentOrderId;
           if (pendingOrderId) {
-            rootNavigationRef.navigate('Main', {screen: 'Bookings'});
+            rootNavigationRef.navigate('Main', { screen: 'Bookings' });
           }
         }}
       >

@@ -111,13 +111,26 @@ export function CartScreen({ navigation }: Props): React.JSX.Element {
                 <Text style={styles.itemDuration}>
                   🕒 {item.service.duration}
                 </Text>
+                {item.service.pricingMode === 'per_sqft' &&
+                item.service.areaSqft ? (
+                  <Text style={styles.itemAreaNote}>
+                    {formatPkr(item.service.pricePerSqft || 0)}/sq ft ×{' '}
+                    {item.service.areaSqft} sq ft
+                  </Text>
+                ) : null}
                 <View style={styles.itemBottomRow}>
                   <Text style={styles.itemPrice}>{formatPkr(item.service.price * item.quantity)}</Text>
-                  <View style={styles.quantityControl}>
-                    <Pressable style={styles.qtyBtn} onPress={() => updateCartQuantity(item.service.id, item.quantity - 1, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Minus color="#76777d" size={16} /></Pressable>
-                    <Text style={styles.qtyText}>{item.quantity}</Text>
-                    <Pressable style={[styles.qtyBtn, {backgroundColor: '#000'}]} onPress={() => updateCartQuantity(item.service.id, item.quantity + 1, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Plus color="#fff" size={16} /></Pressable>
-                  </View>
+                  {item.service.allowQuantity !== false ? (
+                    <View style={styles.quantityControl}>
+                      <Pressable style={styles.qtyBtn} onPress={() => updateCartQuantity(item.service.id, item.quantity - 1, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Minus color="#76777d" size={16} /></Pressable>
+                      <Text style={styles.qtyText}>{item.quantity}</Text>
+                      <Pressable style={[styles.qtyBtn, {backgroundColor: '#000'}]} onPress={() => updateCartQuantity(item.service.id, item.quantity + 1, item.service.selectedWorkPriceId || item.service.selectedWorkPrice?.id)}><Plus color="#fff" size={16} /></Pressable>
+                    </View>
+                  ) : (
+                    <View style={styles.quantityControl}>
+                      <Text style={[styles.qtyText, {color: '#76777d', paddingHorizontal: 12}]}>Qty: {item.quantity}</Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </View>
@@ -257,6 +270,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#45464d',
     marginTop: 4,
+    marginBottom: 10,
+  },
+  itemAreaNote: {
+    fontFamily: fontFamily.bold,
+    fontSize: 12,
+    color: '#006c49',
     marginBottom: 10,
   },
   itemBottomRow: {

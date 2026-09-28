@@ -50,6 +50,7 @@ export function StoreTab(): React.JSX.Element {
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shopProducts = useAppStore(state => state.shopProducts);
   const shopCategories = useAppStore(state => state.shopCategories);
+  const shopBrands = useAppStore(state => state.shopBrands);
   const shopProductsLoading = useAppStore(state => state.shopProductsLoading);
   const shopProductsHasMore = useAppStore(state => state.shopProductsHasMore);
   const shopProductsLoadingMore = useAppStore(state => state.shopProductsLoadingMore);
@@ -58,6 +59,7 @@ export function StoreTab(): React.JSX.Element {
   const appSettings = useAppStore(state => state.appSettings);
   const user = useAppStore(state => state.user);
   const fetchShopProducts = useAppStore(state => state.fetchShopProducts);
+  const fetchShopBrands = useAppStore(state => state.fetchShopBrands);
   const fetchShopOrders = useAppStore(state => state.fetchShopOrders);
   const fetchAppContent = useAppStore(state => state.fetchAppContent);
   const addShopProductToCart = useAppStore(state => state.addShopProductToCart);
@@ -72,6 +74,7 @@ export function StoreTab(): React.JSX.Element {
   const [message, setMessage] = useState('');
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const [activeBrand, setActiveBrand] = useState('All Brands');
   const [selectedProduct, setSelectedProduct] = useState<ShopProduct | null>(
     null,
   );
@@ -87,7 +90,8 @@ export function StoreTab(): React.JSX.Element {
     const loadStore = async () => {
       try {
         await Promise.all([
-          fetchShopProducts({reset: true, category: 'All'}),
+          fetchShopBrands('All'),
+          fetchShopProducts({reset: true, category: 'All', brand: 'All Brands'}),
           fetchAppContent(),
         ]);
       } finally {
@@ -100,11 +104,11 @@ export function StoreTab(): React.JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
-      fetchShopProducts({reset: true, category: activeCategory, search: query}).catch(() =>
+      fetchShopProducts({reset: true, category: activeCategory, brand: activeBrand, search: query}).catch(() =>
         setMessage('Could not refresh store products.'),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeCategory, fetchShopProducts]),
+    }, [activeCategory, activeBrand, fetchShopProducts]),
   );
 
   useEffect(() => {
@@ -135,6 +139,11 @@ export function StoreTab(): React.JSX.Element {
     return [{name: 'All', total}, ...shopCategories];
   }, [shopCategories]);
 
+  const brands = useMemo(() => {
+    const total = shopBrands.reduce((sum, brand) => sum + brand.total, 0);
+    return [{name: 'All Brands', total}, ...shopBrands];
+  }, [shopBrands]);
+
   const activeCategoryTotal = useMemo(() => {
     if (activeCategory === 'All') {
       return categories[0]?.total || shopProducts.length;
@@ -145,13 +154,13 @@ export function StoreTab(): React.JSX.Element {
   // Debounce search: when query changes, re-fetch from server after 400ms
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchShopProducts({reset: true, category: activeCategory, search: query}).catch(() =>
+      fetchShopProducts({reset: true, category: activeCategory, brand: activeBrand, search: query}).catch(() =>
         setMessage('Could not search products.'),
       );
     }, 400);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, activeCategory]);
+  }, [query, activeCategory, activeBrand]);
 
   // Keep category-specific results in their server order. In the default All
   // view, distribute exposure fairly with one product per category per round.
@@ -243,7 +252,11 @@ export function StoreTab(): React.JSX.Element {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchShopProducts({reset: true, category: activeCategory}), fetchAppContent()]);
+    await Promise.all([
+      fetchShopBrands(activeCategory),
+      fetchShopProducts({reset: true, category: activeCategory, brand: activeBrand}),
+      fetchAppContent()
+    ]);
     setRefreshing(false);
   };
 
@@ -253,7 +266,7 @@ export function StoreTab(): React.JSX.Element {
       nativeEvent.contentSize.height - 260;
 
     if (distanceFromBottom && shopProductsHasMore && !shopProductsLoadingMore) {
-      void fetchShopProducts({category: activeCategory, search: query});
+      void fetchShopProducts({category: activeCategory, brand: activeBrand, search: query});
     }
   };
 
@@ -1051,8 +1064,10 @@ export function StoreTab(): React.JSX.Element {
               ]}
               onPress={() => {
                 setActiveCategory(category.name);
+                setActiveBrand('All Brands');
                 setQuery('');
-                void fetchShopProducts({reset: true, category: category.name, search: ''});
+                void fetchShopBrands(category.name);
+                void fetchShopProducts({reset: true, category: category.name, brand: 'All Brands', search: ''});
               }}
             >
               <Text
@@ -1066,6 +1081,36 @@ export function StoreTab(): React.JSX.Element {
             </Pressable>
           ))}
         </ScrollView>
+        {brands.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.categoryRow, { paddingTop: 0, paddingBottom: 16 }]}
+          >
+            {brands.map(brand => (
+              <Pressable
+                key={brand.name}
+                style={[
+                  styles.brandChip,
+                  activeBrand === brand.name && styles.brandChipActive,
+                ]}
+                onPress={() => {
+                  setActiveBrand(brand.name);
+                  void fetchShopProducts({reset: true, category: activeCategory, brand: brand.name, search: query});
+                }}
+              >
+                <Text
+                  style={[
+                    styles.brandChipText,
+                    activeBrand === brand.name && styles.brandChipTextActive,
+                  ]}
+                >
+                  {brand.name}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Products</Text>
@@ -1338,6 +1383,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   categoryChipTextActive: {color: '#ffffff'},
+  brandChip: {
+    height: 30,
+    borderRadius: rounded.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#f0f4ff',
+    paddingHorizontal: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandChipActive: {
+    backgroundColor: '#1a6ef5',
+    borderColor: '#1a6ef5',
+  },
+  brandChipText: {
+    fontFamily: fontFamily.bold,
+    fontWeight: '700',
+    color: colors.text,
+    fontSize: 11,
+  },
+  brandChipTextActive: {color: '#ffffff'},
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

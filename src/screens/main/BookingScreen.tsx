@@ -415,6 +415,13 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   }, [bookingDays.length, recurringEndDay, selectedDay]);
 
   useEffect(() => {
+    // Design work (per-sqft pricing) needs at least 2 days lead time.
+    if (cart.some(item => item.service.pricingMode === 'per_sqft')) {
+      setSelectedDay(current => Math.max(current, 2));
+    }
+  }, [cart]);
+
+  useEffect(() => {
     const pointValue = Math.max(1, Number(appSettings.rewardPointValue || 25));
     const minimumRedeem = Math.max(
       0,
@@ -483,6 +490,18 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
         ? [service.workPrices[0]]
         : [];
 
+  // Area-based services (unit like "Per sq. ft.", or a subcategory marked
+  // per-sqft in the admin) are charged rate × area even when the service has
+  // no specific work prices.
+  const parentSubcategory = useAppStore(state => state.subcategories)
+    .find(sub => sub.id === service.subcategoryId);
+  const serviceIsPerSqft =
+    selectedWorkPrices.length === 0 &&
+    (
+      /\bper\s*sq/i.test(service.serviceType || '') ||
+      service.pricingMode === 'per_sqft' ||
+      parentSubcategory?.pricingMode === 'per_sqft'
+    );
   const bookingWorkPrices = selectedWorkPrices.length
     ? selectedWorkPrices
     : [
@@ -491,6 +510,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
           title: route.params.specificWorkTitle || service.title,
           description: '',
           price: Number(route.params.specificWorkPrice || service.price),
+          pricingMode: serviceIsPerSqft ? ('per_sqft' as const) : undefined,
         },
       ];
 
@@ -564,6 +584,17 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
         .join(', ')
     : bookingWorkPrices.map(work => work.title).join(', ') || service.title;
   const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
+
+  // Per-sqft designs (Wall Texture Design A/B/C): show rate × area and force
+  // the appointment at least two days ahead.
+  const cartAreaItems = cart.filter(
+    item =>
+      item.service.pricingMode === 'per_sqft' &&
+      Number(item.service.areaSqft || 0) > 0,
+  );
+  const hasPerSqftWork =
+    cartAreaItems.length > 0 ||
+    bookingWorkPrices.some(work => work.pricingMode === 'per_sqft');
   const serviceLocationAddress = selectedAddress
     ? `${selectedAddress.label}: ${selectedAddress.detail}`
     : savedServiceLocation?.address || '';
@@ -747,6 +778,15 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
       });
       return;
     }
+
+    if (hasPerSqftWork && selectedDay < 2) {
+      showMessage({
+        title: '2 days advance required',
+        body: 'Design bookings need at least 2 days advance appointment. Please choose a date two or more days from today.',
+        tone: 'warning',
+      });
+      return;
+    }
     setPrivacyAccepted(false);
     setPrivacyError(false);
     setDetailsConfirmVisible(true);
@@ -791,12 +831,26 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
       setDetailsConfirmVisible(false);
       if (!route.params.fromCart)
         bookingWorkPrices.forEach(work => {
+          const isPerSqft = work.pricingMode === 'per_sqft';
+          const workArea = cartAreaItems.find(
+            item =>
+              Number(item.service.selectedWorkPriceId) === Number(work.id),
+          )?.service.areaSqft;
           addToCart({
             ...service,
-            price: Number(work.price || service.price),
+            price: isPerSqft
+              ? Math.round(
+                  Number(work.price) * Number(workArea || 0) * 100,
+                ) / 100
+              : Number(work.price || service.price),
             selectedWorkPrice: work,
             selectedWorkPriceId: work.id || undefined,
             selectedWorkTitle: work.title || service.title,
+            areaSqft: isPerSqft
+              ? Number(workArea || 0) || undefined
+              : undefined,
+            pricePerSqft: isPerSqft ? Number(work.price) : undefined,
+            pricingMode: isPerSqft ? 'per_sqft' : undefined,
           });
         });
       if (route.params.fromCart && !cart.length)
@@ -1760,6 +1814,23 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
               <View style={styles.summaryRowCompact}>
                 <Text style={styles.summaryHint}>
                   {formatPkr(serviceUnitPrice)} x {recurringOccurrences} days
+                </Text>
+              </View>
+            )}
+            {cartAreaItems.length > 0 &&
+              cartAreaItems.map((item, index) => (
+                <View style={styles.summaryRowCompact} key={`area-${index}`}>
+                  <Text style={styles.summaryHint}>
+                    {item.service.selectedWorkTitle || item.service.title}:{' '}
+                    {formatPkr(item.service.pricePerSqft || 0)}/sq ft ×{' '}
+                    {item.service.areaSqft} sq ft
+                  </Text>
+                </View>
+              ))}
+            {hasPerSqftWork && (
+              <View style={styles.summaryRowCompact}>
+                <Text style={styles.summaryHint}>
+                  Design work — appointment at least 2 days ahead.
                 </Text>
               </View>
             )}

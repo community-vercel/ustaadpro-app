@@ -1021,7 +1021,10 @@ export function HomeTab(): React.JSX.Element {
               <View style={styles.resultPriceRow}>
                 <View>
                   <Text style={styles.resultPriceLabel}>Starting from</Text>
-                  <Text style={styles.servicePrice}>{formatPkr(service.price)}</Text>
+                  <Text style={styles.servicePrice}>
+                    {formatPkr(service.price)}
+                    {/\bper\s*sq/i.test(service.serviceType || '') || service.pricingMode === 'per_sqft' ? ' / sq ft' : ''}
+                  </Text>
                 </View>
                 <View style={styles.resultArrow}>
                   <ChevronRight color="#ffffff" size={17} strokeWidth={2.6} />

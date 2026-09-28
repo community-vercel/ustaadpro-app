@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -18,8 +18,8 @@ import {
   launchCamera,
   launchImageLibrary,
 } from 'react-native-image-picker';
-import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Phone,
@@ -29,18 +29,19 @@ import {
   Check,
   ChevronRight,
 } from 'lucide-react-native';
-import {RootStackParamList} from '@/navigation/types';
-import {useAppStore} from '@/store/useAppStore';
-import {fontFamily} from '@/theme/typography';
-import {formatPkr} from '@/utils/currency';
-import {rounded} from '@/theme/layout';
-import {ServiceReview} from '@/types/models';
+import { RootStackParamList } from '@/navigation/types';
+import { useAppStore } from '@/store/useAppStore';
+import { fontFamily } from '@/theme/typography';
+import { formatPkr } from '@/utils/currency';
+import { rounded } from '@/theme/layout';
+import { ServiceReview } from '@/types/models';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 
-export function DetailScreen({navigation, route}: Props): React.JSX.Element {
+export function DetailScreen({ navigation, route }: Props): React.JSX.Element {
   const appSettings = useAppStore(state => state.appSettings);
   const services = useAppStore(state => state.services);
+  const subcategories = useAppStore(state => state.subcategories);
   const fetchAppContent = useAppStore(state => state.fetchAppContent);
   const fetchServices = useAppStore(state => state.fetchServices);
   const fetchServiceReviews = useAppStore(state => state.fetchServiceReviews);
@@ -53,9 +54,12 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
   const [issueDescription, setIssueDescription] = useState('');
   const [issuePhotos, setIssuePhotos] = useState<Asset[]>([]);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
+  const [areaSqft, setAreaSqft] = useState('');
   const [reviews, setReviews] = useState<ServiceReview[]>([]);
   const [reviewsVisible, setReviewsVisible] = useState(false);
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
+  // Full-screen texture preview (zoom-style modal) for the selected design.
+  const [previewImage, setPreviewImage] = useState('');
 
   const promptLogin = () => {
     setLoginPromptVisible(true);
@@ -63,7 +67,7 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
 
   const goToLogin = () => {
     setLoginPromptVisible(false);
-    navigation.navigate('Auth', {screen: 'Login'});
+    navigation.navigate('Auth', { screen: 'Login' });
   };
 
   useEffect(() => {
@@ -73,9 +77,34 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
     void fetchAppContent();
   }, [fetchAppContent, fetchServices, services.length]);
 
+  // Keep service data fresh so admin edits (pricing mode, works, prices)
+  // appear the next time this screen is opened.
+  useEffect(() => {
+    void fetchServices();
+  }, [fetchServices, route.params.serviceId]);
+
   useEffect(() => {
     void fetchServiceReviews(route.params.serviceId).then(setReviews);
   }, [fetchServiceReviews, route.params.serviceId]);
+
+  // Texture designs carry real work-price ids, but the parent card in the
+  // category list opens this screen with selectedWorkId 0 (or none). Default
+  // to the cheapest design so the area box is visible immediately.
+  useEffect(() => {
+    const works = (service?.workPrices || []).filter(
+      work => work.title && Number(work.price) > 0 && work.pricingMode === 'per_sqft',
+    );
+    if (!works.length) {
+      return;
+    }
+    const currentIsReal =
+      selectedWorkIds.length === 1 &&
+      works.some(work => Number(work.id) === Number(selectedWorkIds[0]));
+    if (!currentIsReal) {
+      const cheapest = [...works].sort((a, b) => Number(a.price) - Number(b.price))[0];
+      setSelectedWorkIds([Number(cheapest.id)]);
+    }
+  }, [service?.id, service?.workPrices]);
 
   if (!service) {
     return (
@@ -90,26 +119,75 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
   const dynamicWorkPrices = (service.workPrices || []).filter(
     work => work.title && Number(work.price) > 0,
   );
+  // Area-based services (e.g. "Texture Painting" with unit "Per sq. ft.")
+  // are charged on the area the customer enters, even when the service has
+  // no specific work prices configured in the admin. A subcategory marked
+  // per-sqft in the admin applies to every service under it.
+  const parentSubcategory = subcategories.find(sub => sub.id === service.subcategoryId);
+  const serviceIsPerSqft =
+    dynamicWorkPrices.length === 0 &&
+    (
+      /\bper\s*sq/i.test(service.serviceType || '') ||
+      service.pricingMode === 'per_sqft' ||
+      parentSubcategory?.pricingMode === 'per_sqft'
+    );
   const specificWorks = dynamicWorkPrices.length
     ? dynamicWorkPrices.map((work, index) => ({
-        id: Number(work.id ?? index),
-        workPriceId: work.id,
-        title: work.title,
-        subtitle: work.description || 'Professional service',
-        imageUrl: work.imageUrl,
-        price: Number(work.price),
-      }))
-    : [
-        {
-          id: 0,
-          workPriceId: undefined,
-          title: service.title,
-          subtitle: service.serviceType || 'Standard Visit',
-          imageUrl: undefined,
-          price: service.price,
-        },
-      ];
+      id: Number(work.id ?? index),
+      workPriceId: work.id,
+      title: work.title,
+      subtitle: work.description || 'Professional service',
+      imageUrl: work.imageUrl,
+      price: Number(work.price),
+      pricingMode: work.pricingMode === 'per_sqft' ? 'per_sqft' : 'fixed',
+    }))    : [
+      {
+      id: 0,
+      workPriceId: undefined,
+      title: service.title,
+      subtitle: service.serviceType || 'Standard Visit',
+      imageUrl: undefined,
+      price: service.price,
+      pricingMode: serviceIsPerSqft ? ('per_sqft' as const) : ('fixed' as const),
+    },
+    ];
   const selectedWorkItems = specificWorks.filter(work => selectedWorkIds.includes(work.id));
+  // Texture sub-category mode: the service's designs are area-based, so the
+  // picker is titled "Select Texture Sub-Category" instead of generic works.
+  const isTextureDesignService =
+    dynamicWorkPrices.length > 0 &&
+    dynamicWorkPrices.every(work => work.pricingMode === 'per_sqft');
+
+  // Per-sqft designs (e.g. Wall Texture Design A/B/C): customer enters the
+  // area size and the total = rate × area. Design work is scheduled at least
+  // two days before the appointment.
+  const bookingAreaNumber =
+    Math.round((Number(String(areaSqft).replace(/[^\d.]/g, '')) || 0) * 100) / 100;
+  const selectedPerSqftWorks = selectedWorkItems.filter(
+    work => work.pricingMode === 'per_sqft',
+  );
+  const selectedFixedWorks = selectedWorkItems.filter(
+    work => work.pricingMode !== 'per_sqft',
+  );
+  const areaPricingRequired = selectedPerSqftWorks.length > 0;
+  const perSqftRateSum =
+    Math.round(
+      selectedPerSqftWorks.reduce(
+        (sum, work) => sum + Number(work.price || 0),
+        0,
+      ) * 100,
+    ) / 100;
+  const estimatedTotal =
+    Math.round(
+      selectedWorkItems.reduce(
+        (sum, work) =>
+          sum +
+          (work.pricingMode === 'per_sqft'
+            ? Number(work.price) * bookingAreaNumber
+            : Number(work.price)),
+        0,
+      ) * 100,
+    ) / 100;
 
   const serviceDetails = service.details?.length ? service.details : [];
   const visibleReviews = reviews.slice(0, 2);
@@ -118,9 +196,8 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
     ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount
     : 0;
   const ratingBadgeText = reviewCount
-    ? `${averageRating.toFixed(1)} (${reviewCount} ${
-        reviewCount === 1 ? 'review' : 'reviews'
-      })`
+    ? `${averageRating.toFixed(1)} (${reviewCount} ${reviewCount === 1 ? 'review' : 'reviews'
+    })`
     : 'No reviews yet';
   const getReviewCustomerName = (review: ServiceReview) =>
     review.customerName?.trim() || 'UstaadPro customer';
@@ -327,14 +404,14 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
       </View>
 
       <ScrollView
-        style={{flex: 1}}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.heroImage, {backgroundColor: '#dce9ff'}]}>
+        <View style={[styles.heroImage, { backgroundColor: '#dce9ff' }]}>
           {service.imageUrl && (
             <Image
-              source={{uri: service.imageUrl}}
+              source={{ uri: service.imageUrl }}
               style={styles.heroPhoto}
               resizeMode="cover"
             />
@@ -353,7 +430,16 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
           <View style={styles.titlePriceRow}>
             <Text style={styles.serviceTitle}>{service.title}</Text>
             <View style={styles.priceBlock}>
-              <Text style={styles.priceText}>{formatPkr(service.price)}</Text>
+              <Text style={styles.priceText}>
+                {isTextureDesignService && dynamicWorkPrices.length
+                  ? `From ${formatPkr(
+                      Math.min(
+                        ...dynamicWorkPrices.map(work => Number(work.price || 0)),
+                      ),
+                    )}`
+                  : formatPkr(service.price)}
+                {isTextureDesignService || serviceIsPerSqft ? ' / sq ft' : ''}
+              </Text>
             </View>
           </View>
           <Text style={styles.description}>{service.description}</Text>
@@ -367,9 +453,144 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
         </View>
         <View style={styles.divider} />
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Specific Work</Text>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>
+              {isTextureDesignService
+                ? 'Select Texture Sub-Category'
+                : 'Select Specific Work'}
+            </Text>
+            {isTextureDesignService && selectedWorkItems.length > 0 ? (
+              <View style={styles.selectionCountChip}>
+                <Text style={styles.selectionCountText}>
+                  {selectedWorkItems[0].title}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          {isTextureDesignService ? (
+            <Text style={styles.sectionSubtitle}>
+              Choose one texture design — each design has its own rate per
+              square feet. Need more than one design? Add it to the cart
+              separately.
+            </Text>
+          ) : null}
+          {isTextureDesignService ? (
+            <View style={styles.galleryWrap}>
+              {/* Featured hero preview of the current selection */}
+              <View style={styles.heroPreviewWrap}>
+                {(() => {
+                  const featuredWork =
+                    specificWorks.find(work => work.id === selectedWorkIds[0]) ||
+                    specificWorks[0];
+                  if (!featuredWork) return null;
+                  const featuredSelected = selectedWorkIds.includes(featuredWork.id);
+                  return (
+                    <>
+                      <Pressable onPress={() => setPreviewImage(featuredWork.imageUrl || '')}>
+                        {featuredWork.imageUrl ? (
+                          <Image
+                            source={{uri: featuredWork.imageUrl}}
+                            style={styles.heroPreviewImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={[styles.heroPreviewImage, styles.designImagePlaceholder]}>
+                            <Text style={styles.designImagePlaceholderText}>
+                              {featuredWork.title.slice(0, 2).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                      {featuredSelected && (
+                        <View style={styles.designSelectedBadge}>
+                          <Check color="#ffffff" size={13} strokeWidth={3} />
+                          <Text style={styles.designSelectedBadgeText}>Selected</Text>
+                        </View>
+                      )}
+                      <View style={styles.heroPreviewInfo}>
+                        <View style={{flex: 1, marginRight: 10}}>
+                          <Text style={styles.heroPreviewTitle} numberOfLines={1}>
+                            {featuredWork.title}
+                          </Text>
+                          {featuredWork.subtitle ? (
+                            <Text style={styles.heroPreviewSubtitle} numberOfLines={1}>
+                              {featuredWork.subtitle}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.heroPreviewRateBox}>
+                          <Text style={styles.heroPreviewRate}>
+                            {formatPkr(featuredWork.price)}
+                            {featuredWork.pricingMode === 'per_sqft' ? ' / sq ft' : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    </>
+                  );
+                })()}
+              </View>
+
+              {/* Thumbnail tiles — tap to select a design */}
+              <View style={styles.thumbRow}>
+                {specificWorks.map(work => {
+                  const thumbSelected = selectedWorkIds.includes(work.id);
+                  return (
+                    <Pressable
+                      key={work.id}
+                      style={({pressed}) => [
+                        styles.thumbTile,
+                        thumbSelected && styles.thumbTileActive,
+                        pressed && styles.designCardPressed,
+                      ]}
+                      onPress={() => {
+                        // Single-select: tap a tile to feature and book that
+                        // design. Tap the selected tile again to open the
+                        // full-screen preview.
+                        if (thumbSelected) {
+                          setPreviewImage(work.imageUrl || '');
+                          return;
+                        }
+                        setSelectedWorkIds([work.id]);
+                      }}>
+                      {work.imageUrl ? (
+                        <Image
+                          source={{uri: work.imageUrl}}
+                          style={styles.thumbImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.thumbImage, styles.designImagePlaceholder]}>
+                          <Text style={styles.thumbPlaceholderText}>
+                            {work.title.slice(0, 2).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.thumbOverlay}>
+                        <Text style={styles.thumbPrice} numberOfLines={1}>
+                          {formatPkr(work.price)}
+                          {work.pricingMode === 'per_sqft' ? '/sqft' : ''}
+                        </Text>
+                      </View>
+                      {thumbSelected && (
+                        <View style={styles.thumbCheck}>
+                          <Check color="#ffffff" size={12} strokeWidth={3} />
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
           {specificWorks.map(work => {
             const isSelected = selectedWorkIds.includes(work.id);
+            // Texture designs render as a prominent gallery: the tapped design
+            // becomes the featured hero preview at the top, and all designs
+            // show as thumbnail tiles below. Other services keep the compact
+            // horizontal row layout.
+            if (isTextureDesignService) {
+              return null;
+            }
             return (
               <Pressable
                 key={work.id}
@@ -396,7 +617,7 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
                 </View>
                 {work.imageUrl ? (
                   <Image
-                    source={{uri: work.imageUrl}}
+                    source={{ uri: work.imageUrl }}
                     style={styles.radioImage}
                     resizeMode="cover"
                   />
@@ -411,11 +632,72 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
                     {work.title}
                   </Text>
                   <Text style={styles.radioSubtitle}>{work.subtitle}</Text>
-                  <Text style={styles.radioPrice}>{formatPkr(work.price)}</Text>
+                  <Text style={styles.radioPrice}>
+                    {formatPkr(work.price)}
+                    {work.pricingMode === 'per_sqft' ? ' / sq ft' : ''}
+                  </Text>
                 </View>
               </Pressable>
             );
           })}
+
+          {areaPricingRequired ? (
+            <View style={styles.areaBox}>
+              <Text style={styles.areaBoxTitle}>Area size (square feet)</Text>
+              <Text style={styles.areaBoxHint}>
+                Enter the total wall area so we can calculate your total.
+              </Text>
+              <View style={styles.areaInputRow}>
+                <TextInput
+                  value={areaSqft}
+                  onChangeText={setAreaSqft}
+                  keyboardType="numeric"
+                  placeholder="e.g. 450"
+                  placeholderTextColor="#76777d"
+                  style={styles.areaInput}
+                />
+                <Text style={styles.areaUnit}>sq ft</Text>
+              </View>
+              <View style={styles.areaPresetsRow}>
+                {[100, 200, 500, 1000].map(preset => (
+                  <Pressable
+                    key={preset}
+                    style={[
+                      styles.areaPresetChip,
+                      bookingAreaNumber === preset && styles.areaPresetChipActive,
+                    ]}
+                    onPress={() => setAreaSqft(String(preset))}
+                  >
+                    <Text
+                      style={[
+                        styles.areaPresetText,
+                        bookingAreaNumber === preset && styles.areaPresetTextActive,
+                      ]}
+                    >
+                      {preset} sq ft
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>
+                  Total ({selectedPerSqftWorks.map(work => formatPkr(work.price)).join(' + ')}
+                  /sq ft × {bookingAreaNumber || 0} sq ft
+                  {selectedFixedWorks.length
+                    ? ` + ${selectedFixedWorks.length} fixed work${selectedFixedWorks.length > 1 ? 's' : ''}`
+                    : ''})
+                </Text>
+                <Text style={styles.totalValue}>{formatPkr(estimatedTotal)}</Text>
+              </View>
+              <View style={styles.advanceNoteBox}>
+                <Clock color="#b45309" size={14} />
+                <Text style={styles.advanceNoteText}>
+                  Design work must be booked at least 2 days before the
+                  appointment.
+                </Text>
+              </View>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.divider} />
@@ -449,7 +731,7 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
             </Pressable>
             {issuePhotos.map((photo, index) => (
               <View key={`${photo.uri}-${index}`} style={styles.photoPreview}>
-                <Image source={{uri: photo.uri}} style={styles.photoPreviewImage} />
+                <Image source={{ uri: photo.uri }} style={styles.photoPreviewImage} />
                 <Pressable
                   style={styles.removePhotoButton}
                   onPress={() =>
@@ -534,27 +816,57 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
           )}
         </View>
 
-        <View style={{height: 100}} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+      {/* Full-screen texture preview: zoomed photo of the tapped design. */}
+      <Modal visible={previewImage !== ''} transparent animationType="fade" onRequestClose={() => setPreviewImage('')}>
+        <Pressable style={styles.previewOverlay} onPress={() => setPreviewImage('')}>
+          <View style={styles.previewCard}>
+            {previewImage ? (
+              <Image source={{uri: previewImage}} style={styles.previewImage} resizeMode="contain" />
+            ) : null}
+            <View style={styles.previewClose}>
+              <Text style={styles.previewCloseText}>Tap anywhere to close</Text>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
       <View style={styles.footer}>
         <Pressable
           style={styles.addCartBtn}
           onPress={() => {
+            if (areaPricingRequired && bookingAreaNumber <= 0) {
+              Alert.alert(
+                'Area required',
+                'Please enter the area size in square feet to calculate the total.',
+              );
+              return;
+            }
             const worksToAdd = selectedWorkItems.length ? selectedWorkItems : specificWorks.slice(0, 1);
             worksToAdd.forEach(work => {
               const selectedWorkPrice = (service.workPrices || []).find(item => item.id === work.workPriceId);
+              const isPerSqft = work.pricingMode === 'per_sqft';
               addToCart({
                 ...service,
-                price: Number(work.price || service.price),
+                price: isPerSqft
+                  ? Math.round(Number(work.price) * bookingAreaNumber * 100) / 100
+                  : Number(work.price || service.price),
                 selectedWorkPrice,
                 selectedWorkPriceId: work.workPriceId,
                 selectedWorkTitle: work.title || service.title,
+                areaSqft: isPerSqft ? bookingAreaNumber : undefined,
+                pricePerSqft: isPerSqft ? Number(work.price) : undefined,
+                pricingMode: isPerSqft ? 'per_sqft' : undefined,
               });
             });
             navigation.navigate('Cart');
           }}
         >
-          <Text style={styles.addCartText}>Add to cart</Text>
+          <Text style={styles.addCartText}>
+            {estimatedTotal > 0
+              ? `Book Service - ${formatPkr(estimatedTotal)}`
+              : 'Book Service'}
+          </Text>
         </Pressable>
       </View>
       {reviewsVisible ? (
@@ -615,7 +927,7 @@ export function DetailScreen({navigation, route}: Props): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#f8f9ff'},
+  safe: { flex: 1, backgroundColor: '#f8f9ff' },
   missing: {
     fontFamily: fontFamily.regular,
     color: '#0b1c30',
@@ -697,7 +1009,7 @@ const styles = StyleSheet.create({
     shadowColor: '#0b1c30',
     shadowOpacity: 0.14,
     shadowRadius: 24,
-    shadowOffset: {width: 0, height: 12},
+    shadowOffset: { width: 0, height: 12 },
     elevation: 8,
   },
   loginPromptIcon: {
@@ -856,9 +1168,9 @@ const styles = StyleSheet.create({
   },
 
   // Content
-  content: {paddingBottom: 30},
-  section: {paddingHorizontal: 16, paddingVertical: 16},
-  divider: {height: 1, backgroundColor: '#e5eeff', marginHorizontal: 16},
+  content: { paddingBottom: 30 },
+  section: { paddingHorizontal: 16, paddingVertical: 16 },
+  divider: { height: 1, backgroundColor: '#e5eeff', marginHorizontal: 16 },
 
   // Title / Price
   titlePriceRow: {
@@ -876,7 +1188,7 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     marginRight: 12,
   },
-  priceBlock: {alignItems: 'flex-end'},
+  priceBlock: { alignItems: 'flex-end' },
   priceText: {
     fontFamily: fontFamily.bold,
     fontWeight: '800',
@@ -908,6 +1220,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0b1c30',
     marginBottom: 14,
+  },
+  sectionSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12.5,
+    color: '#64748B',
+    marginTop: -8,
+    marginBottom: 14,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectionCountChip: {
+    backgroundColor: '#e6f2ec',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  selectionCountText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 11.5,
+    color: '#006c49',
   },
 
   // Radio Cards
@@ -952,7 +1287,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#e8eef6',
   },
-  radioContent: {flex: 1},
+  radioContent: { flex: 1 },
   radioTitle: {
     fontFamily: fontFamily.bold,
     fontWeight: '800',
@@ -960,7 +1295,7 @@ const styles = StyleSheet.create({
     color: '#0b1c30',
     marginBottom: 3,
   },
-  radioTitleActive: {color: '#006c49'},
+  radioTitleActive: { color: '#006c49' },
   radioSubtitle: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
@@ -972,6 +1307,175 @@ const styles = StyleSheet.create({
     color: '#0b1c30',
     fontSize: 13,
     marginTop: 5,
+  },
+
+  // ── Texture design gallery (hero preview + thumbnail tiles) ──
+  galleryWrap: {
+    gap: 12,
+  },
+  heroPreviewWrap: {
+    position: 'relative',
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  heroPreviewImage: {
+    width: '100%',
+    height: 210,
+    backgroundColor: '#e8eef6',
+  },
+  heroPreviewInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  heroPreviewTitle: {
+    fontFamily: fontFamily.bold,
+    fontWeight: '800',
+    fontSize: 16,
+    color: '#0b1c30',
+  },
+  heroPreviewSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12.5,
+    color: '#76777d',
+    marginTop: 2,
+  },
+  heroPreviewRateBox: {
+    backgroundColor: '#006c49',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  heroPreviewRate: {
+    fontFamily: fontFamily.extraBold,
+    fontWeight: '900',
+    fontSize: 14.5,
+    color: '#ffffff',
+  },
+  thumbRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  thumbTile: {
+    width: '31.5%',
+    aspectRatio: 0.85,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: '#e8eef6',
+  },
+  thumbTileActive: {
+    borderColor: '#006c49',
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(11, 28, 48, 0.72)',
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  thumbPrice: {
+    fontFamily: fontFamily.bold,
+    fontSize: 10.5,
+    color: '#ffffff',
+  },
+  thumbCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#006c49',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbPlaceholderText: {
+    fontFamily: fontFamily.extraBold,
+    fontSize: 20,
+    color: '#006c49',
+  },
+  designImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e6f2ec',
+  },
+  designImagePlaceholderText: {
+    fontFamily: fontFamily.extraBold,
+    fontSize: 34,
+    color: '#006c49',
+  },
+  designSelectedBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#006c49',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: {width: 0, height: 2},
+    elevation: 3,
+  },
+  designSelectedBadgeText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 11,
+    color: '#ffffff',
+  },
+  designCardPressed: {
+    opacity: 0.92,
+  },
+
+  // ── Full-screen texture preview modal ──
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 15, 26, 0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewCard: {
+    width: '92%',
+    height: '78%',
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#0f172a',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  previewClose: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  previewCloseText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
 
   // Text Area
@@ -988,7 +1492,7 @@ const styles = StyleSheet.create({
   },
 
   // Photos
-  photoRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 12},
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   photoAddBtn: {
     width: 80,
     height: 80,
@@ -1070,7 +1574,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
-  seeAllRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
+  seeAllRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   seeAllText: {
     fontFamily: fontFamily.bold,
     fontWeight: '800',
@@ -1104,14 +1608,14 @@ const styles = StyleSheet.create({
     color: '#0b1c30',
     fontSize: 15,
   },
-  reviewMeta: {flex: 1},
+  reviewMeta: { flex: 1 },
   reviewerName: {
     fontFamily: fontFamily.bold,
     fontWeight: '800',
     fontSize: 14,
     color: '#0b1c30',
   },
-  starsRow: {flexDirection: 'row', gap: 2, marginTop: 3},
+  starsRow: { flexDirection: 'row', gap: 2, marginTop: 3 },
   reviewTime: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
@@ -1155,6 +1659,116 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#ffffff',
     fontSize: 16,
+  },
+
+  // Per-sqft area + total
+  areaBox: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#e5eeff',
+    borderRadius: rounded.lg,
+    backgroundColor: '#f8fbff',
+    padding: 14,
+  },
+  areaBoxTitle: {
+    fontFamily: fontFamily.bold,
+    fontWeight: '800',
+    fontSize: 14,
+    color: '#0b1c30',
+  },
+  areaBoxHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: '#76777d',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  areaInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  areaInput: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#c6c6cd',
+    borderRadius: rounded.default,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    fontFamily: fontFamily.bold,
+    fontSize: 16,
+    color: '#0b1c30',
+  },
+  areaUnit: {
+    fontFamily: fontFamily.bold,
+    fontSize: 14,
+    color: '#45464d',
+  },
+  areaPresetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  areaPresetChip: {
+    borderWidth: 1,
+    borderColor: '#c6d8f5',
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  areaPresetChipActive: {
+    borderColor: '#006c49',
+    backgroundColor: '#e7f5ef',
+  },
+  areaPresetText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: '#45464d',
+  },
+  areaPresetTextActive: {
+    fontFamily: fontFamily.bold,
+    color: '#006c49',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5eeff',
+  },
+  totalLabel: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: '#45464d',
+    marginRight: 8,
+  },
+  totalValue: {
+    fontFamily: fontFamily.bold,
+    fontWeight: '900',
+    fontSize: 18,
+    color: '#006c49',
+  },
+  advanceNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: '#fef3c7',
+    borderRadius: rounded.default,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  advanceNoteText: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: '#b45309',
   },
 });
 

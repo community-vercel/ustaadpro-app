@@ -129,6 +129,7 @@ interface AppState {
   services: ServiceItem[];
   shopProducts: ShopProduct[];
   shopCategories: Array<{ name: string; total: number }>;
+  shopBrands: Array<{ name: string; total: number }>;
   shopProductsHasMore: boolean;
   shopProductsLoading: boolean;
   shopProductsLoadingMore: boolean;
@@ -187,7 +188,8 @@ interface AppState {
   fetchServices: () => Promise<void>;
   fetchAppContent: () => Promise<void>;
   fetchOrders: () => Promise<void>;
-  fetchShopProducts: (options?: { reset?: boolean; category?: string; search?: string }) => Promise<void>;
+  fetchShopProducts: (options?: { reset?: boolean; category?: string; brand?: string; search?: string }) => Promise<void>;
+  fetchShopBrands: (category?: string) => Promise<void>;
   fetchShopOrders: () => Promise<void>;
   fetchServiceReviews: (serviceId: string) => Promise<ServiceReview[]>;
   submitServiceReview: (payload: {
@@ -270,6 +272,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   services: [],
   shopProducts: [],
   shopCategories: [],
+  shopBrands: [],
   shopProductsHasMore: true,
   shopProductsLoading: false,
   shopProductsLoadingMore: false,
@@ -786,6 +789,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           imageUrl: resolveApiAssetUrl(item.imageUrl || item.image_url || ''),
           webImageUrl: resolveApiAssetUrl(item.webImageUrl || item.web_image_url || item.imageUrl || item.image_url || ''),
           mobileIconUrl: resolveApiAssetUrl(item.mobileIconUrl || item.mobile_icon_url || item.imageUrl || item.image_url || ''),
+          pricingMode: item.pricingMode === 'per_sqft' || item.pricing_mode === 'per_sqft' ? ('per_sqft' as const) : ('fixed' as const),
         })),
       );
       const rawServices = catalog.flatMap((category: any) => [
@@ -796,6 +800,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...s,
         categoryId: canonicalCategory(s.categoryId || s.category_id)?.id || s.categoryId || s.category_id,
         subcategoryId: s.subcategoryId || s.subcategory_id || undefined,
+        // Subcategory-level pricing mode marks every service under it as
+        // area-based (per sq ft) unless the service has its own explicit mode.
+        pricingMode: s.pricingMode || (s.subcategoryId && subcategories.find(sub => sub.id === (s.subcategoryId || s.subcategory_id))?.pricingMode === 'per_sqft' ? 'per_sqft' : undefined),
         serviceType: s.unitDescription || s.serviceType || s.service_type,
         imageUrl: resolveApiAssetUrl(s.imageUrl || s.image_url || ''),
         detailDescription: s.detailDescription || s.detail_description || s.description,
@@ -957,7 +964,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   fetchShopProducts: async (options = {}) => {
     const pageSize = 15;
-    const { reset = false, category = 'All', search = '' } = options;
+    const { reset = false, category = 'All', brand = 'All Brands', search = '' } = options;
     const state = get();
 
     if (!reset && (state.shopProductsLoadingMore || !state.shopProductsHasMore)) {
@@ -973,7 +980,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const offset = reset ? 0 : get().shopProducts.length;
       const response = await apiClient.get('/shop/products', {
-        params: { limit: pageSize, offset, category, ...(search ? { search } : {}) },
+        params: { limit: pageSize, offset, category, ...(brand !== 'All Brands' ? { brand } : {}), ...(search ? { search } : {}) },
       });
       const payload = response.data;
       const rawProducts = Array.isArray(payload)
@@ -1019,6 +1026,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  fetchShopBrands: async (category = 'All') => {
+    try {
+      const response = await apiClient.get('/shop/brands', {
+        params: { category },
+      });
+      const brands = Array.isArray(response.data?.brands)
+        ? response.data.brands.map((item: any) => ({
+            name: String(item.name || 'Unknown'),
+            total: Number(item.total || 0),
+          }))
+        : [];
+      set({ shopBrands: brands });
+    } catch (error) {
+      console.error('Fetch shop brands error:', error);
+    }
+  },
+
   fetchShopOrders: async () => {
     if (!get().user) {
       set({ shopOrders: [] });
@@ -1046,6 +1070,34 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   submitServiceReview: async payload => {
     await apiClient.post('/reviews', payload);
+
+    // Optimistically mark the booking item as reviewed so the "Add Review"
+    // button disappears immediately. The refetch below can be coalesced with
+    // a request that started before this review was stored, which would
+    // otherwise leave the button active until the next manual refresh.
+    set(state => ({
+      orders: state.orders.map(order => {
+        if (order.id !== payload.orderId) {
+          return order;
+        }
+        const items = Array.isArray(order.items) ? [...order.items] : [];
+        let targetIndex = items.findIndex(
+          item => item && !item.review && item.service?.id === payload.serviceId,
+        );
+        if (targetIndex === -1) {
+          targetIndex = items.findIndex(item => item && !item.review);
+        }
+        if (targetIndex === -1) {
+          return order;
+        }
+        items[targetIndex] = {
+          ...items[targetIndex],
+          review: {id: -1, rating: payload.rating, comment: payload.comment},
+        };
+        return {...order, items};
+      }),
+    }));
+
     await Promise.all([get().fetchOrders(), get().fetchServices()]);
   },
 
