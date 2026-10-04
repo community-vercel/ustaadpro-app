@@ -423,7 +423,7 @@ export function BookingsTab(): React.JSX.Element {
     ? paymentTarget.paymentMethod === 'Rs 200 Advance'
       ? paymentTarget.status === 'completed'
         ? Math.max(0, Number(paymentTarget.total || 0) - Number(paymentTarget.paymentReceipt?.amount || 0))
-        : Math.min(200, Number(paymentTarget.total || 0))
+        : Math.round(Number(paymentTarget.total || 0) * 0.1)
       : Number(paymentTarget.total || 0)
     : 0;
   const remainingAfterPayment = paymentTarget
@@ -1000,55 +1000,58 @@ export function BookingsTab(): React.JSX.Element {
           </ScrollView>
         </View>
       </Modal>
-      <Modal
-        visible={Boolean(cancelTarget)}
-        transparent
-        animationType="fade"
-        presentationStyle="overFullScreen"
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={closeCancelModal}
-      >
-        <View style={styles.reviewOverlay}>
-          <View style={styles.reviewModal}>
-            <Text style={styles.reviewModalTitle}>Cancel booking</Text>
-            <Text style={styles.reviewModalSubtitle}>
-              Tell us why you want to cancel {cancelTarget?.id}.
-            </Text>
-            <TextInput
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              multiline
-              placeholder="Write cancellation reason..."
-              placeholderTextColor={colors.muted}
-              style={[styles.reviewInput, styles.cancelReasonInput]}
-              textAlignVertical="top"
-              editable={!submittingCancel}
-            />
-            <View style={styles.reviewActions}>
-              <Pressable
-                style={styles.reviewCancel}
-                onPress={closeCancelModal}
-                disabled={submittingCancel}
-              >
-                <Text style={styles.reviewCancelText}>Keep booking</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.cancelSubmit,
-                  submittingCancel && styles.reviewSubmitDisabled,
-                ]}
-                onPress={handleCancelOrder}
-                disabled={submittingCancel}
-              >
-                <Text style={styles.cancelSubmitText}>
-                  {submittingCancel ? 'Cancelling...' : 'Submit cancel'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+      {cancelTarget ? (
+        <View style={styles.cancelSheetLayer}>
+          <Pressable
+            style={styles.reviewCenterOverlay}
+            onPress={() => {
+              if (!submittingCancel) {
+                setCancelTarget(null);
+                setCancelReason('');
+              }
+            }}>
+            <Pressable
+              style={styles.reviewModal}
+              onPress={event => event.stopPropagation()}>
+              <Text style={styles.reviewModalTitle}>Cancel booking</Text>
+              <Text style={styles.reviewModalSubtitle}>
+                Tell us why you want to cancel {cancelTarget?.id}.
+              </Text>
+              <TextInput
+                value={cancelReason}
+                onChangeText={setCancelReason}
+                multiline
+                placeholder="Write cancellation reason..."
+                placeholderTextColor={colors.muted}
+                style={[styles.reviewInput, styles.cancelReasonInput]}
+                textAlignVertical="top"
+                editable={!submittingCancel}
+              />
+              <View style={styles.reviewActions}>
+                <Pressable
+                  style={styles.reviewCancel}
+                  onPress={closeCancelModal}
+                  disabled={submittingCancel}
+                >
+                  <Text style={styles.reviewCancelText}>Keep booking</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.cancelSubmit,
+                    submittingCancel && styles.reviewSubmitDisabled,
+                  ]}
+                  onPress={handleCancelOrder}
+                  disabled={submittingCancel}
+                >
+                  <Text style={styles.cancelSubmitText}>
+                    {submittingCancel ? 'Cancelling...' : 'Submit cancel'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
         </View>
-      </Modal>
+      ) : null}
       {paymentModalVisible ? (
         <View style={styles.paymentSheetLayer}>
         <View style={styles.reviewOverlay}>
@@ -1499,6 +1502,10 @@ const styles = StyleSheet.create({
   paymentSheetLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,
+  },
+  cancelSheetLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 102,
   },
   modalHostLayer: {
     ...StyleSheet.absoluteFillObject,

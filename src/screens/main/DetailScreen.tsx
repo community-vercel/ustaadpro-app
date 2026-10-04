@@ -160,7 +160,7 @@ export function DetailScreen({ navigation, route }: Props): React.JSX.Element {
 
   // Per-sqft designs (e.g. Wall Texture Design A/B/C): customer enters the
   // area size and the total = rate × area. Design work is scheduled at least
-  // two days before the appointment.
+  // three days before the appointment.
   const bookingAreaNumber =
     Math.round((Number(String(areaSqft).replace(/[^\d.]/g, '')) || 0) * 100) / 100;
   const selectedPerSqftWorks = selectedWorkItems.filter(
@@ -692,7 +692,7 @@ export function DetailScreen({ navigation, route }: Props): React.JSX.Element {
               <View style={styles.advanceNoteBox}>
                 <Clock color="#b45309" size={14} />
                 <Text style={styles.advanceNoteText}>
-                  Design work must be booked at least 2 days before the
+                  Design work must be booked at least 3 days before the
                   appointment.
                 </Text>
               </View>

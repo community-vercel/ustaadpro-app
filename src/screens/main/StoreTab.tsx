@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   Check,
   Gift,
+  WalletCards,
   LocateFixed,
   MapPin,
   Minus,
@@ -85,6 +86,7 @@ export function StoreTab(): React.JSX.Element {
   const [deliveryLocation, setDeliveryLocation] = useState('');
   const [locatingShopLocation, setLocatingShopLocation] = useState(false);
   const [useRewardPoints, setUseRewardPoints] = useState(false);
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
 
   useEffect(() => {
     const loadStore = async () => {
@@ -241,7 +243,13 @@ export function StoreTab(): React.JSX.Element {
     redeemableRewardValue >= rewardMinimumRedeem;
   const rewardDiscount =
     useRewardPoints && canRedeemReward ? redeemableRewardValue : 0;
-  const total = Math.max(0, subtotal - rewardDiscount) + shippingCost;
+  const walletBalance = Math.max(0, Number(user?.walletBalance || 0));
+  const totalBeforeWallet = Math.max(0, subtotal - rewardDiscount) + shippingCost;
+  const walletAdjustment =
+    useWalletBalance && walletBalance > 0
+      ? Math.min(walletBalance, totalBeforeWallet)
+      : 0;
+  const total = Math.max(0, totalBeforeWallet - walletAdjustment);
   const selectedCartItem = selectedProduct
     ? shopCart.find(item => item.product.id === selectedProduct.id)
     : undefined;
@@ -378,6 +386,7 @@ export function StoreTab(): React.JSX.Element {
         address: location,
         paymentMethod: 'Cash on Delivery',
         useRewardPoints: useRewardPoints && canRedeemReward,
+        useWalletBalance: useWalletBalance && walletBalance > 0,
       });
       await setSavedShopLocation({
         address: location,
@@ -396,6 +405,7 @@ export function StoreTab(): React.JSX.Element {
       setSelectedProduct(null);
       setAddedProduct(null);
       setUseRewardPoints(false);
+      setUseWalletBalance(false);
       playConfirmationCue();
       setSuccessVisible(true);
       setMessage('Store order placed successfully.');
@@ -922,6 +932,47 @@ export function StoreTab(): React.JSX.Element {
                       </View>
                     </Pressable>
                   ) : null}
+                  {user ? (
+                    <Pressable
+                      style={[
+                        styles.rewardBox,
+                        useWalletBalance && styles.rewardBoxActive,
+                        walletBalance <= 0 && styles.rewardBoxDisabled,
+                      ]}
+                      onPress={() => {
+                        if (walletBalance > 0) {
+                          setUseWalletBalance(current => !current);
+                        }
+                      }}
+                    >
+                      <View style={styles.rewardIconBox}>
+                        <WalletCards color={colors.secondary} size={19} strokeWidth={2.3} />
+                      </View>
+                      <View style={styles.rewardCopy}>
+                        <Text style={styles.rewardTitle}>UstaadPro Wallet</Text>
+                        <Text style={styles.rewardText}>
+                          Available: {formatPkr(walletBalance)}
+                        </Text>
+                        <Text style={styles.rewardHint}>
+                          {walletBalance > 0
+                            ? `Apply up to ${formatPkr(
+                                Math.min(walletBalance, totalBeforeWallet),
+                              )} to this order.`
+                            : 'No wallet balance is available.'}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.rewardCheckbox,
+                          useWalletBalance && styles.rewardCheckboxChecked,
+                        ]}
+                      >
+                        {useWalletBalance ? (
+                          <Check color="#ffffff" size={13} strokeWidth={3} />
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  ) : null}
                   <View style={styles.priceBreakdown}>
                     <View style={styles.priceRow}>
                       <Text style={styles.priceLabel}>Products subtotal</Text>
@@ -937,6 +988,16 @@ export function StoreTab(): React.JSX.Element {
                         </Text>
                         <Text style={styles.rewardPriceValue}>
                           -{formatPkr(rewardDiscount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {walletAdjustment > 0 ? (
+                      <View style={styles.priceRow}>
+                        <Text style={styles.rewardPriceLabel}>
+                          Wallet balance applied
+                        </Text>
+                        <Text style={styles.rewardPriceValue}>
+                          -{formatPkr(walletAdjustment)}
                         </Text>
                       </View>
                     ) : null}

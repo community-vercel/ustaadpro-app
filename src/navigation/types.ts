@@ -37,4 +37,5 @@ export type RootStackParamList = {
   Complaints: undefined;
   Settings: undefined;
   SetPin: undefined;
+  Wallet: undefined;
 };

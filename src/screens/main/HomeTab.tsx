@@ -45,6 +45,7 @@ import {
   Cctv,
   Layers,
   AlertCircle,
+  Star,
 } from 'lucide-react-native';
 import {RootStackParamList} from '@/navigation/types';
 import {useAppStore} from '@/store/useAppStore';
@@ -232,7 +233,32 @@ export function HomeTab(): React.JSX.Element {
     () => subcategories
       .map(subcategory => {
         const matchingServices = servicesBySubcategory.get(subcategory.id) || [];
-        return {id: subcategory.id, title: subcategory.title, categoryTitle: categoryById.get(subcategory.categoryId)?.title || 'Home Services', imageUrl: subcategory.mobileIconUrl || subcategory.webImageUrl || subcategory.imageUrl || matchingServices[0]?.imageUrl || '', serviceCount: matchingServices.length};
+        const reviewCount = matchingServices.reduce(
+          (total, service) => total + Math.max(0, Number(service.reviews || 0)),
+          0,
+        );
+        const ratingTotal = matchingServices.reduce(
+          (total, service) =>
+            total +
+            Number(service.rating || 0) * Math.max(0, Number(service.reviews || 0)),
+          0,
+        );
+
+        return {
+          id: subcategory.id,
+          title: subcategory.title,
+          categoryTitle:
+            categoryById.get(subcategory.categoryId)?.title || 'Home Services',
+          imageUrl:
+            subcategory.mobileIconUrl ||
+            subcategory.webImageUrl ||
+            subcategory.imageUrl ||
+            matchingServices[0]?.imageUrl ||
+            '',
+          serviceCount: matchingServices.length,
+          reviewCount,
+          rating: reviewCount > 0 ? ratingTotal / reviewCount : 0,
+        };
       })
       .filter(item => item.serviceCount > 0),
     [categoryById, servicesBySubcategory, subcategories],
@@ -985,7 +1011,19 @@ export function HomeTab(): React.JSX.Element {
                     {item.imageUrl ? <Image source={{uri: item.imageUrl}} style={styles.quickImage} /> : <Layers color="#006c49" size={25} />}
                   </View>
                   <Text style={styles.quickCardTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.quickCardMeta} numberOfLines={1}>{item.categoryTitle} ? {item.serviceCount} service{item.serviceCount === 1 ? '' : 's'}</Text>
+                  <Text style={styles.quickCardMeta} numberOfLines={1}>
+                    {item.categoryTitle}
+                    {' · '}
+                    {item.serviceCount} service{item.serviceCount === 1 ? '' : 's'}
+                  </Text>
+                  {item.reviewCount > 0 ? (
+                    <View style={styles.quickRatingRow}>
+                      <Star color={'#F59E0B'} fill={'#F59E0B'} size={12} />
+                      <Text style={styles.quickRatingText}>
+                        {item.rating.toFixed(1)} ({item.reviewCount} review{item.reviewCount === 1 ? '' : 's'})
+                      </Text>
+                    </View>
+                  ) : null}
                 </Pressable>
               ))}
             </ScrollView>
@@ -1724,12 +1762,19 @@ const styles = StyleSheet.create({
   quickSection: {marginTop: 2, marginBottom: 20},
   quickHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12},
   quickTitle: {fontFamily: fontFamily.extraBold, fontWeight: '900', fontSize: 21, color: '#0b1c30'},
-  quickScrollContent: {paddingHorizontal: 16, paddingRight: 30, gap: 12},
-  quickCard: {width: 148, padding: 8, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8ECF2', shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: {width: 0, height: 4}, elevation: 2},
+  quickScrollContent: {
+    paddingHorizontal: 16,
+    paddingRight: 30,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  quickCard: {width: 148, minHeight: 180, padding: 8, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8ECF2', shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: {width: 0, height: 4}, elevation: 2},
   quickImageWrap: {height: 88, borderRadius: 12, overflow: 'hidden', backgroundColor: '#EFF8F4', alignItems: 'center', justifyContent: 'center'},
   quickImage: {width: '100%', height: '100%'},
   quickCardTitle: {fontFamily: fontFamily.bold, fontSize: 13, lineHeight: 17, color: '#172033', marginTop: 9, minHeight: 34},
   quickCardMeta: {fontFamily: fontFamily.regular, fontSize: 10, color: '#667085', marginTop: 3},
+  quickRatingRow: {flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4},
+  quickRatingText: {fontFamily: fontFamily.medium, fontSize: 10, color: '#475467'},
 
   // Service Cards
   serviceName: {
@@ -1849,7 +1894,3 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
-
-
-
-

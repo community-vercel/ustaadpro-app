@@ -1,6 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {
-  Alert,
   Image,
   LayoutChangeEvent,
   Linking,
@@ -39,6 +38,7 @@ import {rounded} from '@/theme/layout';
 import {playConfirmationCue} from '@/utils/confirmationCue';
 import {locateCurrentAddress} from '@/services/locationService';
 import {SavedLocation} from '@/types/models';
+import {CenterPopup} from '@/components/CenterPopup';
 import {colors} from '@/theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
@@ -161,6 +161,27 @@ function isBeforeBookingLeadTime(
     now.getHours() * 60 + now.getMinutes() + minimumLeadHours * 60;
   return timeToMinutes(time) < earliestMinutes;
 }
+
+const DESIGN_BOOKING_LEAD_HOURS = 72;
+
+function isBeforeDesignBookingLeadTime(
+  time: string,
+  selectedDay: number,
+  now = new Date(),
+): boolean {
+  const appointment = new Date(now);
+  appointment.setDate(now.getDate() + selectedDay);
+  appointment.setHours(0, timeToMinutes(time), 0, 0);
+
+  const earliestAppointment = new Date(
+    now.getTime() + DESIGN_BOOKING_LEAD_HOURS * 60 * 60 * 1000,
+  );
+  return appointment.getTime() < earliestAppointment.getTime();
+}
+
+function getMinimumDesignBookingDay(time: string, now = new Date()): number {
+  return isBeforeDesignBookingLeadTime(time, 3, now) ? 4 : 3;
+}
 function parseTime(time: string): {
   hour: string;
   minute: string;
@@ -185,9 +206,9 @@ const PAYMENT_METHODS = [
   //   },
   {
     id: 'Rs 200 Advance',
-    label: 'Book with Rs 200',
+    label: 'Book with 10% Advance',
     description:
-      'Pay Rs 200 now via Easypaisa, and pay the remaining balance after service completion.',
+      'Pay 10% of the total now via Easypaisa, and pay the remaining balance after service completion.',
     Icon: Banknote,
     image: easypaisaLogo,
     color: '#16a34a',
@@ -330,6 +351,16 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   const [successVisible, setSuccessVisible] = useState(false);
   const [message, setMessage] = useState<MessageState | null>(null);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [centerPopup, setCenterPopup] = useState<{
+    title: string;
+    body: string;
+    tone: 'success' | 'error' | 'warning' | 'info';
+    actions?: Array<{
+      label: string;
+      onPress: () => void;
+      variant?: 'primary' | 'secondary';
+    }>;
+  } | null>(null);
 
   const addToCart = useAppStore(state => state.addToCart);
   const cart = useAppStore(state => state.cart);
@@ -354,6 +385,23 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   );
   const service = services.find(s => s.id === route.params.serviceId);
   const bookingDays = getBookingDays();
+  const routeWorkPriceIds = (
+    route.params.specificWorkPriceIds ||
+    (route.params.specificWorkPriceId
+      ? [route.params.specificWorkPriceId]
+      : [])
+  ).map(Number);
+  const requiresDesignLeadTime =
+    cart.some(item => item.service.pricingMode === 'per_sqft') ||
+    service?.pricingMode === 'per_sqft' ||
+    Boolean(
+      service?.workPrices?.some(
+        work =>
+          work.pricingMode === 'per_sqft' &&
+          (!routeWorkPriceIds.length ||
+            routeWorkPriceIds.includes(Number(work.id))),
+      ),
+    );
 
   useEffect(() => {
     fetchAddresses();
@@ -415,11 +463,13 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   }, [bookingDays.length, recurringEndDay, selectedDay]);
 
   useEffect(() => {
-    // Design work (per-sqft pricing) needs at least 2 days lead time.
-    if (cart.some(item => item.service.pricingMode === 'per_sqft')) {
-      setSelectedDay(current => Math.max(current, 2));
+    // Design work needs a full 72 hours. If the chosen time on calendar day
+    // three has already passed, roll the appointment forward to day four.
+    if (requiresDesignLeadTime) {
+      const minimumDay = getMinimumDesignBookingDay(selectedTime);
+      setSelectedDay(current => Math.max(current, minimumDay));
     }
-  }, [cart]);
+  }, [requiresDesignLeadTime, selectedTime]);
 
   useEffect(() => {
     const pointValue = Math.max(1, Number(appSettings.rewardPointValue || 25));
@@ -556,6 +606,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
     ? Math.min(walletBalance, total)
     : 0;
   const amountToPay = Math.max(0, total - walletAdjustment);
+  const walletCoversTotal = useWalletBalance && amountToPay === 0 && walletBalance > 0;
   const selectedTimeClosed = isClosedTime(selectedTime);
   const minimumBookingLeadHours = Math.max(
     0,
@@ -586,7 +637,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
   const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
 
   // Per-sqft designs (Wall Texture Design A/B/C): show rate × area and force
-  // the appointment at least two days ahead.
+  // the appointment at least three days ahead.
   const cartAreaItems = cart.filter(
     item =>
       item.service.pricingMode === 'per_sqft' &&
@@ -740,17 +791,26 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
 
   const handleConfirmBooking = () => {
     if (!user) {
-      Alert.alert(
-        'Login required',
-        'Please login or create an account to place a service booking.',
-        [
-          {text: 'Cancel', style: 'cancel'},
+      setCenterPopup({
+        title: 'Login required',
+        body: 'Please login or create an account to place a service booking.',
+        tone: 'warning',
+        actions: [
           {
-            text: 'Login',
-            onPress: () => navigation.navigate('Auth', {screen: 'Login'}),
+            label: 'Login',
+            onPress: () => {
+              setCenterPopup(null);
+              navigation.navigate('Auth', {screen: 'Login'});
+            },
+            variant: 'primary',
+          },
+          {
+            label: 'Cancel',
+            onPress: () => setCenterPopup(null),
+            variant: 'secondary',
           },
         ],
-      );
+      });
       return;
     }
 
@@ -779,10 +839,15 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
       return;
     }
 
-    if (hasPerSqftWork && selectedDay < 2) {
-      showMessage({
-        title: '2 days advance required',
-        body: 'Design bookings need at least 2 days advance appointment. Please choose a date two or more days from today.',
+    if (
+      hasPerSqftWork &&
+      isBeforeDesignBookingLeadTime(selectedTime, selectedDay)
+    ) {
+      const minimumDay = getMinimumDesignBookingDay(selectedTime);
+      setSelectedDay(minimumDay);
+      setCenterPopup({
+        title: '3 days advance required',
+        body: `Design bookings need a full 72 hours advance notice. Your appointment has been moved to ${minimumDay === 4 ? 'the fourth day' : 'three days from today'}.`,
         tone: 'warning',
       });
       return;
@@ -931,6 +996,22 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
                 <Text style={styles.confirmDetailLabel}>Email</Text>
                 <Text style={styles.confirmDetailValue}>
                   {user?.email || 'Email not available'}
+                </Text>
+              </View>
+              <View style={styles.confirmDetailRow}>
+                <Text style={styles.confirmDetailLabel}>
+                  {walletCoversTotal
+                    ? 'Paid via wallet'
+                    : walletAdjustment > 0
+                    ? 'Wallet applied'
+                    : 'Payment'}
+                </Text>
+                <Text style={styles.confirmDetailValue}>
+                  {walletCoversTotal
+                    ? `${formatPkr(total)} — fully covered, instant confirmation`
+                    : walletAdjustment > 0
+                    ? `${formatPkr(walletAdjustment)} from wallet + ${formatPkr(amountToPay)} via Easypaisa`
+                    : `${formatPkr(amountToPay)} via Easypaisa`}
                 </Text>
               </View>
             </View>
@@ -1659,13 +1740,16 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
             </Text>
             {PAYMENT_METHODS.map(method => {
               const isSelected = selectedPayment === method.id;
+              const isDisabled = walletCoversTotal;
               return (
                 <Pressable
                   key={method.id}
                   style={[
                     styles.paymentRow,
                     isSelected && styles.paymentRowActive,
+                    isDisabled && styles.paymentRowDisabled,
                   ]}
+                  disabled={isDisabled}
                   onPress={() => setSelectedPayment(method.id)}
                 >
                   <View
@@ -1704,7 +1788,9 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
                       ) : null}
                     </Text>
                     <Text style={styles.paymentDescription}>
-                      {method.description}
+                      {isDisabled
+                        ? 'Not needed — your wallet balance covers this booking.'
+                        : method.description}
                     </Text>
                   </View>
                   <View
@@ -1738,7 +1824,9 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
               </Text>
               <Text style={styles.rewardHint}>
                 {walletBalance > 0
-                  ? `Apply up to ${formatPkr(Math.min(walletBalance, total))} to this booking.`
+                  ? walletBalance >= total
+                    ? 'Your wallet covers the full booking — booking will be confirmed instantly, no online payment needed.'
+                    : `Apply up to ${formatPkr(walletBalance)} to this booking and pay the rest via Easypaisa.`
                   : 'No wallet balance is available.'}
               </Text>
             </View>
@@ -1830,7 +1918,7 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
             {hasPerSqftWork && (
               <View style={styles.summaryRowCompact}>
                 <Text style={styles.summaryHint}>
-                  Design work — appointment at least 2 days ahead.
+                  Design work — appointment at least 3 days ahead.
                 </Text>
               </View>
             )}
@@ -1884,12 +1972,21 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
               </Text>
               <Text style={styles.summaryTotal}>{formatPkr(amountToPay)}</Text>
             </View>
+            {walletCoversTotal ? (
+              <View style={styles.advanceNoteGreen}>
+                <Text style={styles.advanceNoteGreenText}>
+                  🎉 Fully covered by your wallet balance — this booking will be
+                  confirmed instantly. No Easypaisa payment or receipt upload is
+                  required.
+                </Text>
+              </View>
+            ) : null}
             {selectedPayment === 'Rs 200 Advance' && amountToPay > 0 && (
               <View style={styles.advanceNote}>
                 <Text style={styles.advanceNoteText}>
-                  {formatPkr(Math.min(200, amountToPay))} advance via Easypaisa
+                  {formatPkr(Math.round(amountToPay * 0.1))} advance via Easypaisa
                   required. Remaining{' '}
-                  {formatPkr(Math.max(0, amountToPay - 200))} payable after
+                  {formatPkr(Math.max(0, amountToPay - Math.round(amountToPay * 0.1)))} payable after
                   service.
                 </Text>
               </View>
@@ -1937,6 +2034,16 @@ export function BookingScreen({navigation, route}: Props): React.JSX.Element {
           </Pressable>
         </View>
       </SafeAreaView>
+      {centerPopup ? (
+        <CenterPopup
+          visible
+          title={centerPopup.title}
+          message={centerPopup.body}
+          tone={centerPopup.tone}
+          actions={centerPopup.actions}
+          onDismiss={() => setCenterPopup(null)}
+        />
+      ) : null}
     </>
   );
 }
@@ -3258,6 +3365,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginHorizontal: -10,
     marginBottom: 4,
+  },
+  paymentRowDisabled: {
+    opacity: 0.55,
   },
   paymentLabelBox: {flex: 1},
   paymentLabelActive: {color: '#006c49'},

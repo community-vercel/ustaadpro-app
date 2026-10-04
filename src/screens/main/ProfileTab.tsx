@@ -623,14 +623,20 @@ export function ProfileTab(): React.JSX.Element {
         </View>
 
         <View style={styles.walletRewardsRow}>
-          <View style={[styles.accountValueCard, styles.walletValueCard]}>
+          <Pressable
+            style={[styles.accountValueCard, styles.walletValueCard]}
+            onPress={() => navigation.navigate('Wallet')}>
             <View style={[styles.accountValueIcon, styles.walletValueIcon]}>
               <WalletCards color="#087a5c" size={23} strokeWidth={2.25} />
             </View>
             <Text style={styles.accountValueTitle}>UstaadPro Wallet</Text>
             <Text style={[styles.accountValueAmount, styles.walletAmount]}>{formatPkr(Number(user?.walletBalance || 0))}</Text>
-            <Text style={styles.accountValueBody}>Verified cancelled-service refunds are added here and can be used for future bookings.</Text>
-          </View>
+            <Text style={styles.accountValueBody}>Withdraw to Easypaisa, JazzCash or bank, or use it for future bookings.</Text>
+            <View style={styles.walletOpenHint}>
+              <Text style={styles.walletOpenHintText}>Tap to manage</Text>
+              <ChevronRight color="#087a5c" size={13} strokeWidth={2.4} />
+            </View>
+          </Pressable>
 
           {appSettings.rewardEnabled !== false ? (
             <View style={[styles.accountValueCard, styles.pointsValueCard]}>
@@ -1197,6 +1203,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   walletValueCard: {backgroundColor: '#ffffff'},
+  walletOpenHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 6,
+  },
+  walletOpenHintText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11.5,
+    color: '#087a5c',
+  },
   pointsValueCard: {backgroundColor: '#ffffff'},
   accountValueIcon: {
     width: 42,

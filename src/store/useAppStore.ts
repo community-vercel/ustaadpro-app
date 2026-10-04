@@ -31,6 +31,19 @@ const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 let ordersRequest: Promise<void> | null = null;
 let lastOrdersFingerprint = '';
 
+// In-app notifications automatically expire 3 days after they were created.
+const NOTIFICATION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+function isNotificationExpired(notification: AppNotification): boolean {
+  const createdAt = new Date(notification.createdAt).getTime();
+  // Drop malformed entries with an unreadable date as well.
+  return Number.isNaN(createdAt) || Date.now() - createdAt >= NOTIFICATION_TTL_MS;
+}
+
+function pruneExpiredNotifications(notifications: AppNotification[]): AppNotification[] {
+  return notifications.filter(item => !isNotificationExpired(item));
+}
+
 const LEGACY_CATEGORY_ALIASES: Record<string, { id: string; title: string } | null> = {
   'ac-services': { id: 'hvac', title: 'HVAC' },
   hvac: { id: 'hvac', title: 'HVAC' },
@@ -218,6 +231,8 @@ interface AppState {
   cancelShopOrder: (orderId: string, cancelReason: string) => Promise<void>;
   fetchAddresses: () => Promise<void>;
   hydrateNotifications: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
   addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'> & Partial<Pick<AppNotification, 'id' | 'createdAt'>>) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
@@ -252,6 +267,7 @@ interface AppState {
     address: string;
     paymentMethod: string;
     useRewardPoints?: boolean;
+    useWalletBalance?: boolean;
   }) => Promise<ShopOrder>;
 }
 
@@ -382,10 +398,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrateNotifications: async () => {
     try {
       const raw = await AsyncStorage.getItem('push_notifications');
-      const notifications = raw ? (JSON.parse(raw) as AppNotification[]) : [];
-      set({ notifications: notifications.sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
+      const stored = raw ? (JSON.parse(raw) as AppNotification[]) : [];
+      // Remove notifications older than 3 days and persist the pruned list.
+      const notifications = pruneExpiredNotifications(stored).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      set({ notifications });
+      if (notifications.length !== stored.length) {
+        await AsyncStorage.setItem('push_notifications', JSON.stringify(notifications));
+      }
     } catch (error) {
       console.error('Hydrate notifications error:', error);
+    }
+  },
+
+  deleteNotification: async id => {
+    try {
+      let nextNotifications: AppNotification[] = [];
+      set(state => {
+        nextNotifications = state.notifications.filter(item => item.id !== id);
+        return { notifications: nextNotifications };
+      });
+      await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));
+    } catch (error) {
+      console.error('Delete notification error:', error);
+    }
+  },
+
+  clearAllNotifications: async () => {
+    try {
+      set({ notifications: [] });
+      await AsyncStorage.setItem('push_notifications', JSON.stringify([]));
+    } catch (error) {
+      console.error('Clear notifications error:', error);
     }
   },
 
@@ -403,7 +446,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       let nextNotifications: AppNotification[] = [];
       set(state => {
-        nextNotifications = [nextNotification, ...state.notifications].slice(0, 100);
+        nextNotifications = [nextNotification, ...pruneExpiredNotifications(state.notifications)].slice(0, 100);
         return { notifications: nextNotifications };
       });
       await AsyncStorage.setItem('push_notifications', JSON.stringify(nextNotifications));

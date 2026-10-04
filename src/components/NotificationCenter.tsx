@@ -12,7 +12,9 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Bell, CircleAlert, Megaphone, PackageCheck, ShoppingBag, X} from 'lucide-react-native';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import {Bell, CircleAlert, Megaphone, PackageCheck, ShoppingBag, Trash2, X} from 'lucide-react-native';
+import {SwipeToDeleteWrapper} from '@/components/SwipeToDeleteWrapper';
 import {useAppStore} from '@/store/useAppStore';
 import {colors} from '@/theme/colors';
 import {fontFamily} from '@/theme/typography';
@@ -47,6 +49,8 @@ export function NotificationCenter({
     state => state.markAllNotificationsRead,
   );
   const markNotificationRead = useAppStore(state => state.markNotificationRead);
+  const deleteNotification = useAppStore(state => state.deleteNotification);
+  const clearAllNotifications = useAppStore(state => state.clearAllNotifications);
   const [visible, setVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
@@ -96,6 +100,7 @@ export function NotificationCenter({
         statusBarTranslucent={Platform.OS === 'android'}
         onRequestClose={() => setVisible(false)}
       >
+        <GestureHandlerRootView style={styles.gestureRoot}>
         <SafeAreaView style={styles.screen} edges={['top', 'bottom', 'left', 'right']}>
           <View style={styles.page}>
             <View style={styles.sheetHeader}>
@@ -109,14 +114,27 @@ export function NotificationCenter({
                     : 'No notifications yet'}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setVisible(false)}
-                hitSlop={16}
-                style={styles.closeButton}
-                accessibilityLabel="Close notifications"
-              >
-                <X color={colors.muted} size={20} strokeWidth={2.2} />
-              </Pressable>
+              <View style={styles.sheetHeaderActions}>
+                {notifications.length ? (
+                  <Pressable
+                    onPress={() => void clearAllNotifications()}
+                    hitSlop={8}
+                    style={styles.clearAllButton}
+                    accessibilityLabel="Clear all notifications"
+                  >
+                    <Trash2 color="#ba1a1a" size={16} strokeWidth={2.2} />
+                    <Text style={styles.clearAllText}>Clear all</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  onPress={() => setVisible(false)}
+                  hitSlop={16}
+                  style={styles.closeButton}
+                  accessibilityLabel="Close notifications"
+                >
+                  <X color={colors.muted} size={20} strokeWidth={2.2} />
+                </Pressable>
+              </View>
             </View>
 
             <FlatList
@@ -151,6 +169,7 @@ export function NotificationCenter({
                 const AccentIcon = meta.Icon;
 
                 return (
+                  <SwipeToDeleteWrapper onDelete={() => void deleteNotification(item.id)}>
                   <Pressable
                     style={[styles.item, !item.read && styles.itemUnread]}
                     onPress={async () => {
@@ -178,18 +197,30 @@ export function NotificationCenter({
                         {item.body}
                       </Text>
                     </View>
-                    <Text style={styles.itemTime} numberOfLines={1}>
-                      {new Date(item.createdAt).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </Text>
+                    <View style={styles.itemRight}>
+                      <Text style={styles.itemTime} numberOfLines={1}>
+                        {new Date(item.createdAt).toLocaleTimeString([], {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                      <Pressable
+                        style={styles.itemDelete}
+                        hitSlop={8}
+                        onPress={() => void deleteNotification(item.id)}
+                        accessibilityLabel="Delete notification"
+                      >
+                        <Trash2 color="#ba1a1a" size={15} strokeWidth={2.2} />
+                      </Pressable>
+                    </View>
                   </Pressable>
+                </SwipeToDeleteWrapper>
                 );
               }}
             />
           </View>
         </SafeAreaView>
+        </GestureHandlerRootView>
       </Modal>
     </>
   );
@@ -229,6 +260,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  gestureRoot: {
+    flex: 1,
   },
   page: {
     flex: 1,
@@ -272,6 +306,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  sheetHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 0,
+  },
+  clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: rounded.full,
+    backgroundColor: '#fee2e2',
+  },
+  clearAllText: {
+    fontFamily: fontFamily.semiBold,
+    color: '#ba1a1a',
+    fontSize: 12,
+  },
+  itemRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+    flexShrink: 0,
+  },
+  itemDelete: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   list: {
     padding: 16,

@@ -83,7 +83,7 @@ android {
         applicationId "app.sharplogicians.ustaadpro"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 16
+        versionCode 17
         versionName "1.0"
     }
     signingConfigs {

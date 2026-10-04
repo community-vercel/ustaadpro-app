@@ -21,6 +21,7 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthNavigator } from '@/navigation/AuthNavigator';
 import { MainNavigator } from '@/navigation/MainNavigator';
 import { RootStackParamList } from '@/navigation/types';
@@ -33,6 +34,7 @@ import { AboutScreen } from '@/screens/main/AboutScreen';
 import { PrivacyPolicyScreen } from '@/screens/main/PrivacyPolicyScreen';
 import { ComplaintsScreen } from '@/screens/main/ComplaintsScreen';
 import { SettingsScreen } from '@/screens/main/SettingsScreen';
+import { WalletScreen } from '@/screens/main/WalletScreen';
 import { SetPinScreen } from '@/screens/auth/SetPinScreen';
 import { useAppStore } from '@/store/useAppStore';
 import { colors } from '@/theme/colors';
@@ -602,6 +604,7 @@ export default function App(): React.JSX.Element {
   }
 
   return (
+    <GestureHandlerRootView style={styles.gestureRoot}>
     <SafeAreaProvider>
       <StatusBar barStyle={appIsOpen ? 'dark-content' : 'light-content'} />
       <InAppNotificationBanner
@@ -732,6 +735,10 @@ export default function App(): React.JSX.Element {
                 name="Settings"
                 component={SettingsScreen}
               />
+              <RootStack.Screen
+                name="Wallet"
+                component={WalletScreen}
+              />
               {isGuest && (
                 <RootStack.Screen name="Auth" component={AuthNavigator} />
               )}
@@ -749,10 +756,14 @@ export default function App(): React.JSX.Element {
         </RootStack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   splash: {
     flex: 1,
     alignItems: 'center',
