@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   ArrowLeft,
@@ -51,7 +51,6 @@ export function StoreTab(): React.JSX.Element {
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shopProducts = useAppStore(state => state.shopProducts);
   const shopCategories = useAppStore(state => state.shopCategories);
-  const shopBrands = useAppStore(state => state.shopBrands);
   const shopProductsLoading = useAppStore(state => state.shopProductsLoading);
   const shopProductsHasMore = useAppStore(state => state.shopProductsHasMore);
   const shopProductsLoadingMore = useAppStore(state => state.shopProductsLoadingMore);
@@ -61,6 +60,7 @@ export function StoreTab(): React.JSX.Element {
   const user = useAppStore(state => state.user);
   const fetchShopProducts = useAppStore(state => state.fetchShopProducts);
   const fetchShopBrands = useAppStore(state => state.fetchShopBrands);
+  const shopBrands = useAppStore(state => state.shopBrands);
   const fetchShopOrders = useAppStore(state => state.fetchShopOrders);
   const fetchAppContent = useAppStore(state => state.fetchAppContent);
   const addShopProductToCart = useAppStore(state => state.addShopProductToCart);
@@ -92,8 +92,8 @@ export function StoreTab(): React.JSX.Element {
     const loadStore = async () => {
       try {
         await Promise.all([
-          fetchShopBrands('All'),
           fetchShopProducts({reset: true, category: 'All', brand: 'All Brands'}),
+          fetchShopBrands('All'),
           fetchAppContent(),
         ]);
       } finally {
@@ -104,14 +104,32 @@ export function StoreTab(): React.JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchShopProducts({reset: true, category: activeCategory, brand: activeBrand, search: query}).catch(() =>
-        setMessage('Could not refresh store products.'),
-      );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeCategory, activeBrand, fetchShopProducts]),
-  );
+  useEffect(() => {
+    if (!shopCategories.length) return;
+    void Promise.all(
+      shopCategories.map(category =>
+        fetchShopProducts({
+          reset: true,
+          category: category.name,
+          prefetch: true,
+        }),
+      ),
+    );
+  }, [fetchShopProducts, shopCategories]);
+
+  useEffect(() => {
+    if (!shopBrands.length) return;
+    void Promise.all(
+      shopBrands.map(brand =>
+        fetchShopProducts({
+          reset: true,
+          category: activeCategory,
+          brand: brand.name,
+          prefetch: true,
+        }),
+      ),
+    );
+  }, [activeCategory, fetchShopProducts, shopBrands]);
 
   useEffect(() => {
     return () => {
@@ -142,8 +160,11 @@ export function StoreTab(): React.JSX.Element {
   }, [shopCategories]);
 
   const brands = useMemo(() => {
-    const total = shopBrands.reduce((sum, brand) => sum + brand.total, 0);
-    return [{name: 'All Brands', total}, ...shopBrands];
+    const allBrandsTotal = shopBrands.reduce((sum, brand) => sum + brand.total, 0);
+    return [
+      {name: 'All Brands', total: allBrandsTotal},
+      ...shopBrands,
+    ];
   }, [shopBrands]);
 
   const activeCategoryTotal = useMemo(() => {
@@ -153,26 +174,26 @@ export function StoreTab(): React.JSX.Element {
     return categories.find(category => category.name === activeCategory)?.total || 0;
   }, [activeCategory, categories, shopProducts.length]);
 
-  // Debounce search: when query changes, re-fetch from server after 400ms
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchShopProducts({reset: true, category: activeCategory, brand: activeBrand, search: query}).catch(() =>
-        setMessage('Could not search products.'),
-      );
-    }, 400);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, activeCategory, activeBrand]);
-
-  // Keep category-specific results in their server order. In the default All
-  // view, distribute exposure fairly with one product per category per round.
+  // Products are fetched server-side per category — only filter locally by brand and search.
   const filteredProducts = useMemo(() => {
-    if (activeCategory !== 'All' || shopProducts.length < 2) {
-      return shopProducts;
+    const normalizedQuery = query.trim().toLowerCase();
+    const matchingProducts = shopProducts.filter(product => {
+      if (activeBrand !== 'All Brands' && product.brand !== activeBrand) return false;
+      if (!normalizedQuery) return true;
+      return [product.title, product.description, product.category, product.brand]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+
+    // Only interleave across categories when viewing "All"
+    if (activeCategory !== 'All' || matchingProducts.length < 2) {
+      return matchingProducts;
     }
 
     const productsByCategory = new Map<string, ShopProduct[]>();
-    shopProducts.forEach(product => {
+    matchingProducts.forEach(product => {
       const category = product.category || 'General';
       const categoryProducts = productsByCategory.get(category) || [];
       categoryProducts.push(product);
@@ -203,7 +224,11 @@ export function StoreTab(): React.JSX.Element {
     }
 
     return interleaved;
-  }, [activeCategory, shopCategories, shopProducts]);
+  }, [activeBrand, activeCategory, query, shopCategories, shopProducts]);
+
+  // While a cache miss is being fetched, hide the previous filter's results.
+  // Cached category and brand changes keep loading false, so their products appear immediately.
+  const visibleProducts = shopProductsLoading ? [] : filteredProducts;
 
   const cartCount = useMemo(
     () => shopCart.reduce((sum, item) => sum + item.quantity, 0),
@@ -260,10 +285,12 @@ export function StoreTab(): React.JSX.Element {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    setActiveCategory('All');
+    setActiveBrand('All Brands');
     await Promise.all([
-      fetchShopBrands(activeCategory),
-      fetchShopProducts({reset: true, category: activeCategory, brand: activeBrand}),
-      fetchAppContent()
+      fetchShopProducts({reset: true, category: 'All', brand: 'All Brands'}),
+      fetchShopBrands('All'),
+      fetchAppContent(),
     ]);
     setRefreshing(false);
   };
@@ -274,7 +301,7 @@ export function StoreTab(): React.JSX.Element {
       nativeEvent.contentSize.height - 260;
 
     if (distanceFromBottom && shopProductsHasMore && !shopProductsLoadingMore) {
-      void fetchShopProducts({category: activeCategory, brand: activeBrand, search: query});
+      void fetchShopProducts({category: activeCategory, brand: activeBrand === 'All Brands' ? undefined : activeBrand});
     }
   };
 
@@ -1124,11 +1151,12 @@ export function StoreTab(): React.JSX.Element {
                 activeCategory === category.name && styles.categoryChipActive,
               ]}
               onPress={() => {
-                setActiveCategory(category.name);
+                const cat = category.name;
+                setActiveCategory(cat);
                 setActiveBrand('All Brands');
                 setQuery('');
-                void fetchShopBrands(category.name);
-                void fetchShopProducts({reset: true, category: category.name, brand: 'All Brands', search: ''});
+                void fetchShopBrands(cat === 'All' ? 'All' : cat);
+                void fetchShopProducts({reset: true, category: cat});
               }}
             >
               <Text
@@ -1156,8 +1184,13 @@ export function StoreTab(): React.JSX.Element {
                   activeBrand === brand.name && styles.brandChipActive,
                 ]}
                 onPress={() => {
-                  setActiveBrand(brand.name);
-                  void fetchShopProducts({reset: true, category: activeCategory, brand: brand.name, search: query});
+                  const b = brand.name;
+                  setActiveBrand(b);
+                  void fetchShopProducts({
+                    reset: true,
+                    category: activeCategory,
+                    brand: b === 'All Brands' ? undefined : b,
+                  });
                 }}
               >
                 <Text
@@ -1175,15 +1208,15 @@ export function StoreTab(): React.JSX.Element {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Products</Text>
-          <Text style={styles.sectionMeta}>{filteredProducts.length} / {activeCategoryTotal} items</Text>
+          <Text style={styles.sectionMeta}>{visibleProducts.length} / {activeCategoryTotal} items</Text>
         </View>
 
-        {shopProductsLoading && filteredProducts.length === 0 ? (
+        {shopProductsLoading ? (
           <View style={styles.productLoadingFooter}>
             <ActivityIndicator color={colors.secondary} size="small" />
             <Text style={styles.productLoadingText}>Loading products...</Text>
           </View>
-        ) : filteredProducts.length === 0 ? (
+        ) : visibleProducts.length === 0 ? (
           <View style={styles.emptyCard}>
             <Package color={colors.secondary} size={30} strokeWidth={2.2} />
             <Text style={styles.emptyTitle}>No products found</Text>
@@ -1193,7 +1226,7 @@ export function StoreTab(): React.JSX.Element {
           </View>
         ) : (
           <View style={styles.productGrid}>
-            {filteredProducts.map(product => {
+            {visibleProducts.map(product => {
               const inCart = shopCart.find(item => item.product.id === product.id);
               return (
                 <Pressable
@@ -1257,7 +1290,7 @@ export function StoreTab(): React.JSX.Element {
         ) : shopProductsHasMore ? (
           <Pressable
             style={styles.productLoadHint}
-            onPress={() => fetchShopProducts({category: activeCategory, search: query})}
+            onPress={() => fetchShopProducts({category: activeCategory, brand: activeBrand === 'All Brands' ? undefined : activeBrand})}
           >
             <Text style={styles.productLoadHintText}>Load more products</Text>
           </Pressable>

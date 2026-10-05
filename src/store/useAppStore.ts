@@ -29,6 +29,18 @@ const PENDING_PAYMENT_ORDER_ID_KEY = 'pending_service_payment_order_id';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 let ordersRequest: Promise<void> | null = null;
+let shopProductsRequestId = 0;
+const shopProductCache = new Map<string, {
+  products: ShopProduct[];
+  categories: Array<{name: string; total: number}>;
+  hasMore: boolean;
+  savedAt: number;
+}>();
+const SHOP_PRODUCT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function shopProductCacheKey(category: string, brand: string, search: string) {
+  return `${category}\u0000${brand}\u0000${search.trim().toLowerCase()}`;
+}
 let lastOrdersFingerprint = '';
 
 // In-app notifications automatically expire 3 days after they were created.
@@ -201,7 +213,7 @@ interface AppState {
   fetchServices: () => Promise<void>;
   fetchAppContent: () => Promise<void>;
   fetchOrders: () => Promise<void>;
-  fetchShopProducts: (options?: { reset?: boolean; category?: string; brand?: string; search?: string }) => Promise<void>;
+  fetchShopProducts: (options?: { reset?: boolean; category?: string; brand?: string; search?: string; prefetch?: boolean; force?: boolean }) => Promise<void>;
   fetchShopBrands: (category?: string) => Promise<void>;
   fetchShopOrders: () => Promise<void>;
   fetchServiceReviews: (serviceId: string) => Promise<ServiceReview[]>;
@@ -1007,14 +1019,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   fetchShopProducts: async (options = {}) => {
     const pageSize = 15;
-    const { reset = false, category = 'All', brand = 'All Brands', search = '' } = options;
+    const { reset = false, category = 'All', brand = 'All Brands', search = '', prefetch = false, force = false } = options;
     const state = get();
+    const cacheKey = shopProductCacheKey(category, brand, search);
+    const cached = shopProductCache.get(cacheKey);
+    // Every visible reset gets a new token, including a cache hit. This stops
+    // an older network request from replacing the newly selected cached view.
+    const requestId = prefetch ? shopProductsRequestId : reset ? ++shopProductsRequestId : shopProductsRequestId;
+
+    if (
+      reset &&
+      !force &&
+      cached &&
+      Date.now() - cached.savedAt < SHOP_PRODUCT_CACHE_TTL_MS
+    ) {
+      if (!prefetch) {
+        set({
+          shopProducts: cached.products,
+          shopCategories: cached.categories.length ? cached.categories : get().shopCategories,
+          shopProductsHasMore: cached.hasMore,
+          shopProductsLoading: false,
+          shopProductsLoadingMore: false,
+        });
+      }
+      return;
+    }
 
     if (!reset && (state.shopProductsLoadingMore || !state.shopProductsHasMore)) {
       return;
     }
 
-    set(
+    if (!prefetch) set(
       reset
         ? { shopProductsLoading: true, shopProductsHasMore: true }
         : { shopProductsLoadingMore: true },
@@ -1039,11 +1074,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [];
       const products: ShopProduct[] = rawProducts.map((product: any) => ({
         ...product,
-        imageUrl: resolveApiAssetUrl(product.imageUrl || ''),
+        imageUrl: product.imageUrl || '',
         price: Number(product.price),
         originalPrice: Number(product.originalPrice || 0),
         stock: Number(product.stock || 0),
       }));
+
+      // A newer filter request has started. Ignore this older response so a
+      // quick category tap cannot replace the screen with stale products.
+      if (!prefetch && requestId !== shopProductsRequestId) return;
+
+      const hasMore = Array.isArray(payload)
+        ? products.length === pageSize
+        : Boolean(payload?.hasMore);
+
+      if (reset) {
+        shopProductCache.set(cacheKey, {
+          products,
+          categories,
+          hasMore,
+          savedAt: Date.now(),
+        });
+      }
+
+      if (prefetch) return;
 
       set(current => {
         const existing = reset ? [] : current.shopProducts;
@@ -1056,15 +1110,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         return {
           shopProducts: merged,
           shopCategories: categories.length ? categories : current.shopCategories,
-          shopProductsHasMore: Array.isArray(payload)
-            ? products.length === pageSize
-            : Boolean(payload?.hasMore),
+          shopProductsHasMore: hasMore,
           shopProductsLoading: false,
           shopProductsLoadingMore: false,
         };
       });
     } catch (error) {
-      set({ shopProductsLoading: false, shopProductsLoadingMore: false });
+      if (!prefetch && requestId === shopProductsRequestId) {
+        set({ shopProductsLoading: false, shopProductsLoadingMore: false });
+      }
       console.error('Fetch shop products error:', error);
     }
   },

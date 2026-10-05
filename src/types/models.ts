@@ -157,6 +157,7 @@ export interface ShopProduct {
   id: string;
   title: string;
   category: string;
+  brand?: string;
   description: string;
   price: number;
   originalPrice: number;

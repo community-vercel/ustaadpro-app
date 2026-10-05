@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -16,14 +16,17 @@ export const API_ORIGIN = getApiOrigin(API_URL);
 export function resolveApiAssetUrl(url?: string) {
   if (!url) return '';
   const activeApiOrigin = getApiOrigin(activeApiUrl);
-  const localUploadPath = url.match(
+  // Strip markdown hyperlink format: [text](https://...) → https://...
+  const markdownMatch = url.match(/^\[[^\]]*\]\((https?:\/\/[^)]+)\)$/i);
+  const resolved = markdownMatch ? markdownMatch[1].trim() : url;
+  const localUploadPath = resolved.match(
     /^https?:\/\/(?:127\.0\.0\.1|localhost):\d+(\/uploads\/.+)$/i,
   )?.[1];
   if (localUploadPath) {
     return `${activeApiOrigin}${localUploadPath}`;
   }
-  if (url.startsWith('http') || url.startsWith('data:')) return url;
-  return `${activeApiOrigin}${url}`;
+  if (resolved.startsWith('http') || resolved.startsWith('data:')) return resolved;
+  return `${activeApiOrigin}${resolved}`;
 }
 
 export const apiClient = axios.create({
