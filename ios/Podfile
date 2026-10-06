@@ -5,6 +5,11 @@
 # until those dependencies catch up.
 ENV['RCT_NEW_ARCH_ENABLED'] = '0'
 
+# Link Firebase Analytics without IDFA/AdSupport. The app doesn't show an
+# App Tracking Transparency prompt and declares NSPrivacyTracking=false, so
+# pulling in the ad-identifier variant would only add App Store review risk.
+$RNFirebaseAnalyticsWithoutAdIdSupport = true
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-e',
   'require("path");require("os");var p = require.resolve("react-native/scripts/react_native_pods.rb",{paths:[process.argv[1]]});process.stdout.write(p)',
