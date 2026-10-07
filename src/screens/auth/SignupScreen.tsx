@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Image,
   InteractionManager,
@@ -66,10 +66,22 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
   const [awaitingOtp, setAwaitingOtp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
   const [message, setMessage] = useState<MessageState | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showPasswordRule = password.length > 0 && !isMediumPassword(password);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+
+    const timer = setInterval(() => {
+      setResendSeconds(seconds => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [resendSeconds]);
 
   const scrollToPasswordInput = () => {
     InteractionManager.runAfterInteractions(() => {
@@ -166,6 +178,7 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
         verificationChannel,
       });
       setAwaitingOtp(true);
+      setResendSeconds(30);
       showMessage({
         title:
           verificationChannel === 'phone'
@@ -182,6 +195,36 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (loading || resendLoading || resendSeconds > 0) return;
+
+    setResendLoading(true);
+    try {
+      await signup({
+        name,
+        email,
+        phone: `+92${phone}`,
+        password,
+        verificationChannel,
+      });
+      setOtpCode('');
+      setResendSeconds(30);
+      showMessage({
+        title: 'New code sent',
+        body: `A new 6 digit code has been sent to your ${verificationChannel}.`,
+        tone: 'success',
+      });
+    } catch (error: any) {
+      showMessage({
+        title: 'Could not resend code',
+        body: error.response?.data?.message || 'Please check your connection and try again.',
+        tone: 'error',
+      });
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -270,6 +313,7 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
                   </Text>
                 </Pressable>
               </View>
+
             )}
 
             {message && (
@@ -381,6 +425,7 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
                 )}
               </>
             ) : (
+              <>
               <View style={styles.inputContainer}>
                 <KeyRound color={colors.muted} size={20} style={styles.inputIcon} />
                 <TextInput
@@ -398,6 +443,30 @@ export function SignupScreen({ navigation }: Props): React.JSX.Element {
                   maxLength={6}
                 />
               </View>
+              {verificationChannel === 'phone' && (
+                <View style={styles.resendRow}>
+                  <Text style={styles.resendHint}>SMS delayed or not received?</Text>
+                  <Pressable
+                    onPress={handleResendOtp}
+                    disabled={loading || resendLoading || resendSeconds > 0}
+                    hitSlop={8}
+                  >
+                    <Text
+                      style={[
+                        styles.resendButtonText,
+                        (loading || resendLoading || resendSeconds > 0) && styles.resendButtonTextDisabled,
+                      ]}
+                    >
+                      {resendLoading
+                        ? 'Sending...'
+                        : resendSeconds > 0
+                          ? `Resend in ${resendSeconds}s`
+                          : 'Resend OTP'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+              </>
             )}
 
             <Pressable
@@ -656,6 +725,28 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     color: '#ffffff',
     fontSize: 16,
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: -4,
+    marginBottom: 2,
+  },
+  resendHint: {
+    flex: 1,
+    color: colors.muted,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+  },
+  resendButtonText: {
+    color: colors.primaryContainer,
+    fontFamily: fontFamily.bold,
+    fontSize: 13,
+    marginLeft: 12,
+  },
+  resendButtonTextDisabled: {
+    color: colors.muted,
   },
   bottomPanel: {
     flexDirection: 'row',
